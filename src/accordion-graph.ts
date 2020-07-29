@@ -3,6 +3,7 @@ import '@material/mwc-select';
 import '@material/mwc-list/mwc-list-item';
 import '@material/mwc-button';
 import { IconOption, IconRefresh, } from './components/icon-element';
+import cytoscape from 'cytoscape';
 
 export class AccordionGraph extends LitElement {  
   static get properties(): PropertyDeclarations {
@@ -21,10 +22,61 @@ export class AccordionGraph extends LitElement {
   graphType = [`App`, `Versioned App`, `Service`, `Workload`];
   selectedGraphTypeIndex = 0;
 
+  private cy?: cytoscape.Core;
+
   @queryAll(`mwc-select`) protected selectBoxs!: HTMLElement[]|null;
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+  }
+
+  protected firstUpdated(): void {
+    this.initCytoscape();
+  }
 
   protected updated(): void {
     this.setCustomStyleMwcSelect();
+  }
+
+  initCytoscape(): void {
+    this.cy = cytoscape({
+      container: this.shadowRoot?.querySelector(`.graph`),
+      elements: [
+        {
+          data: { id: 'a' }
+        },
+        {
+          data: { id: 'b' }
+        },
+        {
+          data: { id: 'ab', source: 'a', target: 'b' }
+        }
+      ],
+    
+      style: [
+        {
+          selector: 'node',
+          style: {
+            'background-color': '#666',
+            'label': 'data(id)'
+          }
+        },    
+        {
+          selector: 'edge',
+          style: {
+            'width': 3,
+            'line-color': '#ccc',
+            'target-arrow-color': '#ccc',
+            'target-arrow-shape': 'triangle',
+            'curve-style': 'bezier'
+          }
+        }
+      ],    
+      layout: {
+        name: 'grid',
+        rows: 1
+      }    
+    });
   }
 
   // NOTE: mwc-select dont' have a custom-property, height.
