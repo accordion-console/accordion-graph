@@ -1,4 +1,4 @@
-import { html, css, LitElement, PropertyDeclarations, query, } from 'lit-element';
+import { html, css, LitElement, PropertyDeclarations, queryAll, } from 'lit-element';
 import '@material/mwc-select';
 import '@material/mwc-list/mwc-list-item';
 
@@ -7,13 +7,19 @@ export class AccordionGraph extends LitElement {
     return {
       hideInfoBox: { type: Boolean, },
       namespaceList: { type: Array, },
+      selectedNamespaceIndex: { type: Number, },
+      graphType: { type: Array, },
+      selectedGraphTypeIndex: { type: Number, },
     }
   }
 
   hideInfoBox = false;
   namespaceList = [`namespace 1`, `namespace 2`];
+  selectedNamespaceIndex = 0;
+  graphType = [`App`, `Versioned App`, `Service`, `Workload`];
+  selectedGraphTypeIndex = 0;
 
-  @query(`mwc-select`) protected selectBox!: HTMLElement|null;
+  @queryAll(`mwc-select`) protected selectBoxs!: HTMLElement[]|null;
 
   protected updated(): void {
     this.setCustomStyleMwcSelect();
@@ -22,21 +28,25 @@ export class AccordionGraph extends LitElement {
   // NOTE: mwc-select dont' have a custom-property, height.
   async setCustomStyleMwcSelect(): Promise<void> {
     await this.updateComplete;
-    const selectBox = this.selectBox;
-    const selectBoxShadowRoot = selectBox?.shadowRoot;
-    const sheet = new CSSStyleSheet();
-    const cssStyle = css`
-    .mdc-select .mdc-select__anchor {
-      height: 30px;
-    }
-    `;
-    
-    if (!selectBox) {
-      return;
-    }			
+    const selectBoxs = this.selectBoxs;
 
-    (sheet as any).replaceSync(cssStyle.cssText);
-    (selectBoxShadowRoot as any).adoptedStyleSheets = [...(selectBoxShadowRoot as any).adoptedStyleSheets, sheet];
+    selectBoxs?.forEach(selectBox => {
+      const selectBoxShadowRoot = selectBox?.shadowRoot;
+      const sheet = new CSSStyleSheet();
+      const cssStyle = css`
+      .mdc-select .mdc-select__anchor {
+        width: 180px;
+        height: 30px;
+      }
+      `;
+      
+      if (!selectBox) {
+        return;
+      }			
+  
+      (sheet as any).replaceSync(cssStyle.cssText);
+      (selectBoxShadowRoot as any).adoptedStyleSheets = [...(selectBoxShadowRoot as any).adoptedStyleSheets, sheet];
+    });    
   }
 
   render() {
@@ -45,12 +55,17 @@ export class AccordionGraph extends LitElement {
       <div class="toolbar">
         <!-- NOTE: Namespace Filter -->
         <mwc-select class="namespace-filter" outlined label="namespace">
-          <mwc-list-item></mwc-list-item>
-          ${this.namespaceList.map(namespace => html`<mwc-list-item value="0">${namespace}</mwc-list-item>`)}
-          
+          ${this.namespaceList.map((item, index) => html`<mwc-list-item ?selected=${this.selectedNamespaceIndex === index} value="${index}">${item}</mwc-list-item>`)}          
         </mwc-select>
-        <!-- TODO: Graph Type Filter -->
-        <!-- TODO: Find / Hide Search Input -->
+        <!-- NOTE: Graph Type Filter -->
+        <mwc-select class="graph-type" outlined label="Graph Type">
+          ${this.graphType.map((item, index) => html`<mwc-list-item ?selected=${this.selectedNamespaceIndex === index} value="${index}">${item}</mwc-list-item>`)}          
+        </mwc-select>
+        <!-- NOTE: Find / Hide Search Input -->
+        <!-- <div class="find-or-hide">
+          <input class="search--find" type="search" placeholder="Find"/>
+          <input class="search--hide" type="search" placeholder="Hide"/>
+        </div> -->
         <!-- TODO: Option Button -->
         <!-- TODO: Refresh Button -->
       </div>
@@ -89,7 +104,8 @@ export class AccordionGraph extends LitElement {
     .toolbar {
       display: flex;
       align-items: flex-end;
-      flex: 0 0 60px;
+      flex: 0 0 auto;
+      flex-wrap: wrap;
     }
 
     .graph-or-info {
@@ -115,12 +131,49 @@ export class AccordionGraph extends LitElement {
       border: 1px solid rgb(224, 224, 224);
     }
 
-    .namespace-filter {
-      margin-left: 10px;
+    .namespace-filter,
+    .graph-type {      
+      width: 180px;
+      margin: 10px;
+      margin-top: 30px;
+    }
+
+    mwc-select {
+      --mdc-menu-item-height: 30px;
+      --mdc-theme-primary: rgb(65, 61, 143);
+      background-color: rgb(255, 255, 255);  
     }
 
     mwc-list-item {
       height: 30px;
+    }
+
+    .find-or-hide {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      justify-content: space-evenly;
+      width: 180px;
+    }
+
+    .search--find {
+      margin-top: 10px;
+    }
+
+    .search--find,
+    .search--hide {
+      white-space: normal;
+      align-items: center;
+      font-size: 12px;
+      color: rgb(51, 51, 51);
+      position: relative;
+      margin-bottom: 10px;
+      border-width: 1px;
+      border-style: solid;
+      border-color: rgb(171, 180, 190);
+      border-radius: 3px;
+      padding: 5px 10px 5px 10px;
+      outline: none;
     }
   `;
 }
