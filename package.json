@@ -18,6 +18,7 @@
     "format": "npm run format:eslint && npm run format:prettier"
   },
   "dependencies": {
+    "@material/mwc-button": "^0.17.2",
     "@material/mwc-list": "^0.17.2",
     "@material/mwc-select": "^0.17.2",
     "lit-element": "^2.2.1",

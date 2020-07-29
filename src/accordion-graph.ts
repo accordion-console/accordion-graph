@@ -1,6 +1,8 @@
 import { html, css, LitElement, PropertyDeclarations, queryAll, } from 'lit-element';
 import '@material/mwc-select';
 import '@material/mwc-list/mwc-list-item';
+import '@material/mwc-button';
+import { IconOption, IconRefresh, } from './components/icon-element';
 
 export class AccordionGraph extends LitElement {  
   static get properties(): PropertyDeclarations {
@@ -53,11 +55,11 @@ export class AccordionGraph extends LitElement {
     return html`
     <div class="accordion-graph">
       <div class="toolbar">
-        <!-- NOTE: Namespace Filter -->
+
         <mwc-select class="namespace-filter" outlined label="namespace">
           ${this.namespaceList.map((item, index) => html`<mwc-list-item ?selected=${this.selectedNamespaceIndex === index} value="${index}">${item}</mwc-list-item>`)}          
         </mwc-select>
-        <!-- NOTE: Graph Type Filter -->
+
         <mwc-select class="graph-type" outlined label="Graph Type">
           ${this.graphType.map((item, index) => html`<mwc-list-item ?selected=${this.selectedNamespaceIndex === index} value="${index}">${item}</mwc-list-item>`)}          
         </mwc-select>
@@ -66,8 +68,10 @@ export class AccordionGraph extends LitElement {
           <input class="search--find" type="search" placeholder="Find"/>
           <input class="search--hide" type="search" placeholder="Hide"/>
         </div> -->
-        <!-- TODO: Option Button -->
-        <!-- TODO: Refresh Button -->
+
+        <mwc-button class="option-button" label="">${IconOption}</mwc-button>
+
+        <mwc-button class="refresh-button" label="">${IconRefresh}</mwc-button>
       </div>
       <div class="graph-or-info">
         <div class="graph">
@@ -174,6 +178,25 @@ export class AccordionGraph extends LitElement {
       border-radius: 3px;
       padding: 5px 10px 5px 10px;
       outline: none;
+    }
+
+    .option-button,
+    .refresh-button {
+      display: flex;
+      align-self: center;      
+    }
+
+    .option-button > svg,
+    .refresh-button > svg {
+      color: #666;
+    }
+    
+    .option-button {
+      margin-left: auto;
+    }
+
+    .refresh-button {
+      margin-right: 10px;
     }
   `;
 }
