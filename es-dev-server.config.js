@@ -1,6 +1,7 @@
 /* eslint-disable no-undef */
 /* eslint-disable @typescript-eslint/no-var-requires */
 const cjsTransformer = require('es-dev-commonjs-transformer');
+const proxy = require('koa-proxies');
 
 module.exports = {
   port: 9385,
@@ -9,11 +10,17 @@ module.exports = {
   nodeResolve: true,
   babel: true,
   fileExtensions: ['.ts', '.js'],
-  appIndex: 'demo/index.html',
+  appIndex: 'index.html',
   responseTransformers: [
     cjsTransformer([
         '**/node_modules/@open-wc/**/*',
     ]),
   ],  
+  middlewares: [
+    proxy('/server', {
+      target: 'http://10.20.200.201:30021/kiali/api',
+      rewrite: (path) => path.replace(/^\/server/, ""),
+    }),
+  ],
   moduleDirs: ['node_modules'],
 };
