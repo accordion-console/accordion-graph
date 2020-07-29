@@ -38,43 +38,25 @@ export class AccordionGraph extends LitElement {
     this.setCustomStyleMwcSelect();
   }
 
-  initCytoscape(): void {
+  async initCytoscape(): Promise<void> {
+    // NOTE: Kiali Graph API Parameter
+    // duration
+    // graphType
+    // injectServiceNodes
+    // groupBy
+    // appenders
+    // namespaces
+    const data = await fetch('/server/namespaces/graph?duration=21600s&graphType=app&injectServiceNodes=true&groupBy=app&appenders=deadNode,sidecarsCheck,serviceEntry,istio,unusedNode,securityPolicy&namespaces=book-info').then( res => res.json() );
+    console.log(data);
+
     this.cy = cytoscape({
       container: this.shadowRoot?.querySelector(`.graph`),
-      elements: [
-        {
-          data: { id: 'a' }
-        },
-        {
-          data: { id: 'b' }
-        },
-        {
-          data: { id: 'ab', source: 'a', target: 'b' }
-        }
-      ],
+      elements: data.elements,
     
-      style: [
-        {
-          selector: 'node',
-          style: {
-            'background-color': '#666',
-            'label': 'data(id)'
-          }
-        },    
-        {
-          selector: 'edge',
-          style: {
-            'width': 3,
-            'line-color': '#ccc',
-            'target-arrow-color': '#ccc',
-            'target-arrow-shape': 'triangle',
-            'curve-style': 'bezier'
-          }
-        }
+      style: [        
       ],    
       layout: {
         name: 'grid',
-        rows: 1
       }    
     });
   }
