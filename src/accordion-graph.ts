@@ -31,23 +31,10 @@ export class AccordionGraph extends LitElement {
   async setCustomStyleMwcSelect(): Promise<void> {
     await this.updateComplete;
     const selectBoxs = this.selectBoxs;
-
     selectBoxs?.forEach(selectBox => {
-      const selectBoxShadowRoot = selectBox?.shadowRoot;
-      const sheet = new CSSStyleSheet();
-      const cssStyle = css`
-      .mdc-select .mdc-select__anchor {
-        width: 180px;
-        height: 30px;
-      }
-      `;
-      
-      if (!selectBox) {
-        return;
-      }			
-  
-      (sheet as any).replaceSync(cssStyle.cssText);
-      (selectBoxShadowRoot as any).adoptedStyleSheets = [...(selectBoxShadowRoot as any).adoptedStyleSheets, sheet];
+      // NOTE: fix ie11 css
+      (selectBox.shadowRoot?.querySelector(`.mdc-select__anchor`) as HTMLElement).style.width = `180px`;
+      (selectBox.shadowRoot?.querySelector(`.mdc-select__anchor`) as HTMLElement).style.height = `30px`;      
     });    
   }
 
@@ -63,6 +50,7 @@ export class AccordionGraph extends LitElement {
         <mwc-select class="graph-type" outlined label="Graph Type">
           ${this.graphType.map((item, index) => html`<mwc-list-item ?selected=${this.selectedNamespaceIndex === index} value="${index}">${item}</mwc-list-item>`)}          
         </mwc-select>
+
         <!-- NOTE: Find / Hide Search Input -->
         <!-- <div class="find-or-hide">
           <input class="search--find" type="search" placeholder="Find"/>
@@ -107,9 +95,8 @@ export class AccordionGraph extends LitElement {
 
     .toolbar {
       display: flex;
-      align-items: flex-end;
-      flex: 0 0 auto;
-      flex-wrap: wrap;
+      flex: 0 0 70px;
+      flex-direction: row;
     }
 
     .graph-or-info {
@@ -127,7 +114,6 @@ export class AccordionGraph extends LitElement {
       flex: 0 0 300px;
     }
 
-    .accordion-graph,
     .toolbar,
     .graph,
     .info {
@@ -140,6 +126,7 @@ export class AccordionGraph extends LitElement {
       width: 180px;
       margin: 10px;
       margin-top: 30px;
+      height: 30px;
     }
 
     mwc-select {
@@ -184,11 +171,21 @@ export class AccordionGraph extends LitElement {
     .refresh-button {
       display: flex;
       align-self: center;      
+      color: #666;
+      width: 60px;
+      height: 40px;
+
+      border: none;
+      margin-top: auto;
+      margin-bottom: auto;      
     }
 
-    .option-button > svg,
-    .refresh-button > svg {
+    .icon-option,
+    .icon-refresh {      
       color: #666;
+      border: none;
+      width: 20px;
+      height: 20px;
     }
     
     .option-button {
