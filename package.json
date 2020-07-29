@@ -8,7 +8,7 @@
   "main": "index.js",
   "module": "index.js",
   "scripts": {
-    "start": "concurrently --kill-others --names tsc,es-dev-server \"npm run tsc:watch\" \"es-dev-server --app-index demo/index.html --node-resolve --open --watch --port 9385\"",
+    "start": "concurrently --kill-others --names tsc,es-dev-server \"npm run tsc:watch\" \"es-dev-server --config ./es-dev-server.config.js\"",
     "tsc:watch": "tsc --watch",
     "lint:eslint": "eslint --ext .ts,.html . --ignore-path .gitignore",
     "format:eslint": "eslint --ext .ts,.html . --fix --ignore-path .gitignore",
@@ -21,23 +21,26 @@
     "@material/mwc-button": "^0.17.2",
     "@material/mwc-list": "^0.17.2",
     "@material/mwc-select": "^0.17.2",
+    "cytoscape": "^3.15.2",
     "lit-element": "^2.2.1",
     "lit-html": "^1.1.2"
   },
   "devDependencies": {
-    "@types/node": "13.11.1",
-    "es-dev-server": "^1.23.0",
-    "typescript": "~3.8.2",
-    "concurrently": "^5.1.0",
-    "tslib": "^1.11.0",
-    "eslint": "^6.1.0",
     "@open-wc/eslint-config": "^2.0.0",
+    "@types/cytoscape": "^3.14.7",
+    "@types/node": "13.11.1",
     "@typescript-eslint/eslint-plugin": "^2.20.0",
     "@typescript-eslint/parser": "^2.20.0",
-    "prettier": "^2.0.4",
+    "concurrently": "^5.1.0",
+    "es-dev-commonjs-transformer": "^0.2.0",
+    "es-dev-server": "^1.23.0",
+    "eslint": "^6.1.0",
     "eslint-config-prettier": "^6.11.0",
     "husky": "^1.0.0",
-    "lint-staged": "^10.0.0"
+    "lint-staged": "^10.0.0",
+    "prettier": "^2.0.4",
+    "tslib": "^1.11.0",
+    "typescript": "~3.8.2"
   },
   "eslintConfig": {
     "extends": [
