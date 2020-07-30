@@ -81,6 +81,7 @@ export class AccordionGraph extends LitElement {
       elements: elements,
       boxSelectionEnabled: false,
       autounselectify: true,
+      // userZoomingEnabled: false,
       style: [                
       ],    
       layout: {
@@ -97,8 +98,8 @@ export class AccordionGraph extends LitElement {
     this.cy.on('zoom', (event) => {
       const zoom = event.cy.zoom();
 
-      this.shadowRoot.querySelectorAll(`.tippy-tooltip`).forEach(tooltip => {
-        (tooltip as HTMLElement).style.transform = `translateY(${zoom * 5}px) scale(${zoom * 0.8})`;
+      this.shadowRoot.querySelectorAll(`.tippy-content`).forEach(tooltip => {
+        (tooltip as HTMLElement).style.transform = `scale(${zoom / 1.7})`;
       });
     });
   }
@@ -107,22 +108,20 @@ export class AccordionGraph extends LitElement {
     console.log(datas);
     datas.forEach((each, index) => {
       const { data } = each;
-
-      if (!data.parent) {
-        const node = this.cy!.nodes().eq(index);        
-        
-        const tippy = this.makeTippy(node, (data.app as string));
+      const node = this.cy!.nodes().eq(index);   
+      if (!data.parent) {                     
+        const tippy = this.makeTippy(node, (data.app as string), `parent`);
 
         tippy.show();
-
         return;
       }
-      
+      const tippy = this.makeTippy(node, (data.app as string), `child`);
+      tippy.show();
     });    
   }
 
   // Tippy.js v6+ is not compatible with Popper v1. so, Tippy you can use is v5.
-  makeTippy(node: cytoscape.NodeSingular, text: string) {    
+  makeTippy(node: cytoscape.NodeSingular, text: string, theme?: string ) {
     const ref = node.popperRef();
     const dummyDomEle = document.createElement('div');
 
@@ -144,12 +143,12 @@ export class AccordionGraph extends LitElement {
         sticky,
       ],
       arrow: true,
-      placement: 'bottom',
+      placement: `bottom`,
       hideOnClick: false,
       multiple: false,
       sticky: true,
       interactive: false,
-      theme: 'light-border',
+      theme: theme,
       boundary: this.shadowRoot.querySelector(`.graph`) as HTMLElement,
       appendTo: this.shadowRoot.querySelector(`.graph`),
       popperOptions: {
@@ -334,17 +333,39 @@ export class AccordionGraph extends LitElement {
       margin-right: 10px;
     }    
 
-    .tippy-tooltip {
+    .tippy-tooltip[data-out-of-boundaries] {
+      opacity: 0;
+    }
+
+    .parent-theme .tippy-content {
+      border-radius: 3px;
+      box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.2), 0 2px 8px 0 rgba(0, 0, 0, 0.19);
+      display: flex;
       background-color: #393f44;
       color: #fff;
       font-size: 11px;
-      padding: 5px;
-      border-radius: 10px;
-      transform: translate3d(0, 8px, 0);
+      padding: 3px 5px;
+      border-radius: 3px;
+      border-width: 1px;
     }
 
-    .tippy-tooltip[data-out-of-boundaries] {
-      opacity: 0;
+    .parent-theme {      
+      transform: translate3d(0, 20px, 0);
+    }
+    
+    .child-theme .tippy-content {
+      align-items: center;
+      background-color: #fffa;
+      border-radius: 3px;
+      border-width: 1px;
+      color: #030303;
+      display: flex;
+      font-size: 8px;
+      padding: 3px 5px;
+    }
+    
+    .child-theme {      
+      transform: translate3d(0, -10px, 0);
     }
   `;
 }
