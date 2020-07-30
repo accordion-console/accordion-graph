@@ -6,7 +6,7 @@ import { IconOption, IconRefresh, } from './components/icon-element';
 import cytoscape from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 import popper from 'cytoscape-popper';
-import tippy from 'tippy.js';
+import tippy, { sticky } from 'tippy.js';
 
 cytoscape.use(dagre);
 cytoscape.use(popper);
@@ -94,7 +94,10 @@ export class AccordionGraph extends LitElement {
       if (!data.parent) {
         const node = this.cy!.nodes().eq(index);        
         
-        this.makeTippy(node, (data.app as string));
+        const tippy = this.makeTippy(node, (data.app as string));
+
+        tippy.show();
+
         return;
       }
       
@@ -113,8 +116,7 @@ export class AccordionGraph extends LitElement {
         return div;
       },
       popper: {
-        placement: 'bottom',
-        
+        placement: 'bottom',        
       },
     });
 
@@ -148,18 +150,17 @@ export class AccordionGraph extends LitElement {
 
         return div;
       },
-
+      plugins: [
+        sticky,
+      ],
       arrow: true,
       placement: 'bottom',
       hideOnClick: false,
       multiple: true,
       sticky: true,
-
       interactive: true,
       appendTo: document.body,
-    });
-
-    tip.show();
+    });  
 
     return tip;
   }
