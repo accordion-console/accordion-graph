@@ -4,6 +4,9 @@ import '@material/mwc-list/mwc-list-item';
 import '@material/mwc-button';
 import { IconOption, IconRefresh, } from './components/icon-element';
 import cytoscape from 'cytoscape';
+import dagre from 'cytoscape-dagre';
+
+cytoscape.use(dagre);
 
 export class AccordionGraph extends LitElement {  
   static get properties(): PropertyDeclarations {
@@ -27,6 +30,7 @@ export class AccordionGraph extends LitElement {
   @queryAll(`mwc-select`) protected selectBoxs!: HTMLElement[]|null;
 
   disconnectedCallback(): void {
+    this.cy?.destroy();
     super.disconnectedCallback();
   }
 
@@ -47,18 +51,22 @@ export class AccordionGraph extends LitElement {
     // appenders
     // namespaces
     const data = await fetch('/server/namespaces/graph?duration=21600s&graphType=app&injectServiceNodes=true&groupBy=app&appenders=deadNode,sidecarsCheck,serviceEntry,istio,unusedNode,securityPolicy&namespaces=book-info').then( res => res.json() );
-    console.log(data);
+    console.log(data);    
 
     this.cy = cytoscape({
       container: this.shadowRoot?.querySelector(`.graph`),
       elements: data.elements,
-    
       style: [        
       ],    
       layout: {
-        name: 'grid',
+        name: 'dagre',
+        fit: true,
+        nodeDimensionsIncludeLabels: true,
+        rankDir: 'LR'
       }    
     });
+
+    this.cy.autolock(true);
   }
 
   // NOTE: mwc-select dont' have a custom-property, height.
@@ -146,6 +154,7 @@ export class AccordionGraph extends LitElement {
 
     .info {
       flex: 0 0 300px;
+      width: 300px;
     }
 
     .toolbar,
