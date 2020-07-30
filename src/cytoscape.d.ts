@@ -5,6 +5,11 @@ declare module 'cytoscape' {
     nodeDimensionsIncludeLabels?: boolean;
     rankDir?: string;
   }
+
+  export interface NodeSingular {
+    popper?: any;
+    popperRef?: any;
+  }
 }
 
 declare const type: object;

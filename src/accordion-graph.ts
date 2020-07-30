@@ -5,8 +5,22 @@ import '@material/mwc-button';
 import { IconOption, IconRefresh, } from './components/icon-element';
 import cytoscape from 'cytoscape';
 import dagre from 'cytoscape-dagre';
+import popper from 'cytoscape-popper';
+import tippy from 'tippy.js';
 
 cytoscape.use(dagre);
+cytoscape.use(popper);
+
+export interface NodesData {
+  data: {
+    app?: string;
+    id?: string;
+    isGroup?: string;
+    namespace?: string;
+    nodeType?: string;
+    parent?: string;
+  };
+}
 
 export class AccordionGraph extends LitElement {  
   static get properties(): PropertyDeclarations {
@@ -51,12 +65,13 @@ export class AccordionGraph extends LitElement {
     // appenders
     // namespaces
     const data = await fetch('/server/namespaces/graph?duration=21600s&graphType=app&injectServiceNodes=true&groupBy=app&appenders=deadNode,sidecarsCheck,serviceEntry,istio,unusedNode,securityPolicy&namespaces=book-info').then( res => res.json() );
+    const elements = data.elements;
     console.log(data);    
 
     this.cy = cytoscape({
       container: this.shadowRoot?.querySelector(`.graph`),
-      elements: data.elements,
-      style: [        
+      elements: elements,
+      style: [                
       ],    
       layout: {
         name: 'dagre',
@@ -67,6 +82,86 @@ export class AccordionGraph extends LitElement {
     });
 
     this.cy.autolock(true);
+
+    this.initPopper(elements.nodes);
+  }
+
+  initPopper(datas: NodesData[]): void {
+    console.log(datas);
+    datas.forEach((each, index) => {
+      const { data } = each;
+
+      if (!data.parent) {
+        const node = this.cy!.nodes().eq(index);        
+        
+        this.makeTippy(node, (data.app as string));
+        return;
+      }
+      
+    });    
+  }
+
+  makePopper(node: cytoscape.NodeSingular, text: string): void {
+    const popper = node.popper({
+      content: () => {
+        const div = document.createElement('div');
+
+        div.innerHTML = text;
+
+        document.body.appendChild( div );
+
+        return div;
+      },
+      popper: {
+        placement: 'bottom',
+        
+      },
+    });
+
+    const update = () => {
+      popper.scheduleUpdate();
+    };
+
+    node.on('position', update);
+
+    this.cy!.on('pan zoom resize', update);
+  }
+
+  // Tippy.js v6+ is not compatible with Popper v1. so, Tippy you can use is v5.
+  makeTippy(node: cytoscape.NodeSingular, text: string) {
+    (window as any).process = {env: {NODE_ENV: 'production'}}
+
+    const ref = node.popperRef();
+    const dummyDomEle = document.createElement('div');
+
+    const tip = tippy( dummyDomEle, {
+      onCreate: (instance) => {
+        instance.popperInstance.reference = ref;
+      },
+      lazy: false,
+      trigger: 'manual',
+
+      content: () => {
+        const div = document.createElement('div');
+
+        div.innerHTML = text;
+
+        return div;
+      },
+
+      arrow: true,
+      placement: 'bottom',
+      hideOnClick: false,
+      multiple: true,
+      sticky: true,
+
+      interactive: true,
+      appendTo: document.body,
+    });
+
+    tip.show();
+
+    return tip;
   }
 
   // NOTE: mwc-select dont' have a custom-property, height.

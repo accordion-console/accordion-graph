@@ -13,7 +13,8 @@
     "outDir": "dist",
     "sourceMap": true,
     "inlineSources": true,
-    "rootDir": "./"
+    "rootDir": "./",
+    "strictNullChecks": false
   },
   "include": ["**/*.ts"]
 }
