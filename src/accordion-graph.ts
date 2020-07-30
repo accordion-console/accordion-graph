@@ -159,7 +159,7 @@ export class AccordionGraph extends LitElement {
       multiple: true,
       sticky: true,
       interactive: true,
-      appendTo: document.body,
+      appendTo: this.shadowRoot.querySelector(`.graph`),
     });  
 
     return tip;
@@ -333,6 +333,16 @@ export class AccordionGraph extends LitElement {
 
     .refresh-button {
       margin-right: 10px;
+    }
+
+    /* Tippy */
+    .tippy-tooltip {
+      background-color: #393f44;
+      color: #fff;
+      font-size: 11px;
+      padding: 5px;
+      border-radius: 10px;
+      transform: translate3d(0, 8px, 0);
     }
   `;
 }
