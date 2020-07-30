@@ -14,13 +14,13 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background-color: black;
+      background-color: lightgray;
     }
 
     #demo {
       width: 1200px;
       height: 600px;
-    }
+    }  
   </style>
 </head>
 <body>
@@ -29,6 +29,9 @@
   <script type="module">
     import { html, render } from 'lit-html';
     import './dist/accordion-graph.js';
+
+    // eslint-disable-next-line no-undef
+    window.process = {env: {NODE_ENV: 'production'}}
 
     render(
       html`

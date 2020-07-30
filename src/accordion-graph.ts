@@ -6,7 +6,7 @@ import { IconOption, IconRefresh, } from './components/icon-element';
 import cytoscape from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 import popper from 'cytoscape-popper';
-import tippy, { sticky } from 'tippy.js';
+import tippy, { sticky, } from 'tippy.js';
 
 cytoscape.use(dagre);
 cytoscape.use(popper);
@@ -20,6 +20,14 @@ export interface NodesData {
     nodeType?: string;
     parent?: string;
   };
+}
+
+export enum NodeType {
+  AGGREGATE = 'aggregate',
+  APP = 'app',
+  SERVICE = 'service',
+  UNKNOWN = 'unknown',
+  WORKLOAD = 'workload'
 }
 
 export class AccordionGraph extends LitElement {  
@@ -71,6 +79,8 @@ export class AccordionGraph extends LitElement {
     this.cy = cytoscape({
       container: this.shadowRoot?.querySelector(`.graph`),
       elements: elements,
+      boxSelectionEnabled: false,
+      autounselectify: true,
       style: [                
       ],    
       layout: {
@@ -104,39 +114,12 @@ export class AccordionGraph extends LitElement {
     });    
   }
 
-  makePopper(node: cytoscape.NodeSingular, text: string): void {
-    const popper = node.popper({
-      content: () => {
-        const div = document.createElement('div');
-
-        div.innerHTML = text;
-
-        document.body.appendChild( div );
-
-        return div;
-      },
-      popper: {
-        placement: 'bottom',        
-      },
-    });
-
-    const update = () => {
-      popper.scheduleUpdate();
-    };
-
-    node.on('position', update);
-
-    this.cy!.on('pan zoom resize', update);
-  }
-
   // Tippy.js v6+ is not compatible with Popper v1. so, Tippy you can use is v5.
-  makeTippy(node: cytoscape.NodeSingular, text: string) {
-    (window as any).process = {env: {NODE_ENV: 'production'}}
-
+  makeTippy(node: cytoscape.NodeSingular, text: string) {    
     const ref = node.popperRef();
     const dummyDomEle = document.createElement('div');
-
-    const tip = tippy( dummyDomEle, {
+    console.log(ref);
+    const tip = tippy(dummyDomEle, {
       onCreate: (instance) => {
         instance.popperInstance.reference = ref;
       },
@@ -156,11 +139,20 @@ export class AccordionGraph extends LitElement {
       arrow: true,
       placement: 'bottom',
       hideOnClick: false,
-      multiple: true,
+      multiple: false,
       sticky: true,
-      interactive: true,
+      interactive: false,
+      theme: 'light-border',
+      boundary: this.shadowRoot.querySelector(`.graph`) as HTMLElement,
       appendTo: this.shadowRoot.querySelector(`.graph`),
-    });  
+      popperOptions: {
+        modifiers: {
+          preventOverflow: {
+            boundariesElement: this.shadowRoot.querySelector(`.graph`) as HTMLElement,
+          }
+        }
+      }
+    });
 
     return tip;
   }
@@ -178,7 +170,7 @@ export class AccordionGraph extends LitElement {
 
   render() {
     return html`
-    <div class="accordion-graph">
+    <div class="graph-wrap">
       <div class="toolbar">
 
         <mwc-select class="namespace-filter" outlined label="namespace">
@@ -201,7 +193,6 @@ export class AccordionGraph extends LitElement {
       </div>
       <div class="graph-or-info">
         <div class="graph">
-
         </div>
 
         <div class="info ${this.hideInfoBox ? `hide` : ``}">
@@ -224,7 +215,7 @@ export class AccordionGraph extends LitElement {
       display: none;
     }
 
-    .accordion-graph {
+    .graph-wrap {
       display: flex;
       flex-direction: column;
       width: 100%;
@@ -246,6 +237,7 @@ export class AccordionGraph extends LitElement {
 
     .graph {
       flex: 1 1 auto;
+      overflow: hidden;
     }
 
     .info {
@@ -333,9 +325,8 @@ export class AccordionGraph extends LitElement {
 
     .refresh-button {
       margin-right: 10px;
-    }
+    }    
 
-    /* Tippy */
     .tippy-tooltip {
       background-color: #393f44;
       color: #fff;
@@ -343,6 +334,10 @@ export class AccordionGraph extends LitElement {
       padding: 5px;
       border-radius: 10px;
       transform: translate3d(0, 8px, 0);
+    }
+
+    .tippy-tooltip[data-out-of-boundaries] {
+      opacity: 0;
     }
   `;
 }
