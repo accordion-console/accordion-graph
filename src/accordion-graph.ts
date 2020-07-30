@@ -93,10 +93,17 @@ export class AccordionGraph extends LitElement {
 
     this.cy.autolock(true);
 
-    this.initPopper(elements.nodes);
+    this.initTippy(elements.nodes);  
+    this.cy.on('zoom', (event) => {
+      const zoom = event.cy.zoom();
+
+      this.shadowRoot.querySelectorAll(`.tippy-tooltip`).forEach(tooltip => {
+        (tooltip as HTMLElement).style.transform = `translateY(${zoom * 5}px) scale(${zoom * 0.8})`;
+      });
+    });
   }
 
-  initPopper(datas: NodesData[]): void {
+  initTippy(datas: NodesData[]): void {
     console.log(datas);
     datas.forEach((each, index) => {
       const { data } = each;
@@ -118,7 +125,7 @@ export class AccordionGraph extends LitElement {
   makeTippy(node: cytoscape.NodeSingular, text: string) {    
     const ref = node.popperRef();
     const dummyDomEle = document.createElement('div');
-    console.log(ref);
+
     const tip = tippy(dummyDomEle, {
       onCreate: (instance) => {
         instance.popperInstance.reference = ref;
