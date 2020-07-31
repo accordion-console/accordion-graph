@@ -73,16 +73,61 @@ export class AccordionGraph extends LitElement {
     // appenders
     // namespaces
     const data = await fetch('/server/namespaces/graph?duration=21600s&graphType=app&injectServiceNodes=true&groupBy=app&appenders=deadNode,sidecarsCheck,serviceEntry,istio,unusedNode,securityPolicy&namespaces=book-info').then( res => res.json() );
-    const elements = data.elements;
-    console.log(data);    
+    const { elements } = data;
+    const { nodes } = elements;
+    console.log(data);
+
+    this.addDataNodeType(nodes);
+    this.addDataOpacity(nodes);
 
     this.cy = cytoscape({
       container: this.shadowRoot?.querySelector(`.graph`),
       elements: elements,
       boxSelectionEnabled: false,
       autounselectify: true,
-      // userZoomingEnabled: false,
-      style: [                
+      style: [      
+        {
+          "selector": "node",
+          "style": {
+            ["shape" as any]: "data(type)",
+          }
+        },
+        {
+          "selector": ":child",          
+          "style": {            
+            'content': 'data(nodeType)',
+            'text-valign': 'center',
+            'color': 'white',
+            'font-size': 8,
+            'text-outline-width': 0.7,
+            'text-transform': 'uppercase',
+            'text-outline-color': '#666',
+            'background-color': '#fff',
+            'border-width': 1,
+            'border-color': '#666',
+            'width': 30,
+            'height': 30,
+            ['opacity' as any]: 'data(opacity)',
+            ["border-style" as any]: 'data(borderStyle)',
+          }
+        }, 
+        {
+          "selector": ":parent",
+          "style": {
+            'background-color': 'rgba(255, 255, 255, 0.8)',
+            'border-width': 1,
+            'border-color': 'rgba(206, 205, 206, 0.5)',
+          }
+        },
+        {
+          "selector": "edge",
+          "style": {
+            'curve-style': 'straight',
+            'target-arrow-shape': 'triangle-backcurve',
+            "arrow-scale": 0.5,
+            'width': 1,
+          }
+        },
       ],    
       layout: {
         name: 'dagre',
@@ -101,6 +146,39 @@ export class AccordionGraph extends LitElement {
       this.shadowRoot.querySelectorAll(`.tippy-content`).forEach(tooltip => {
         (tooltip as HTMLElement).style.transform = `scale(${zoom / 1.7})`;
       });
+    });
+  }
+
+  addDataNodeType(nodes: any): void {
+    nodes.forEach((node: any) => {
+      switch (node.data.nodeType) {
+        case `app`:
+          node.data.type = `round-rectangle`;
+          break;        
+        case `service`:
+          node.data.type = `round-triangle`;
+          break;
+        case `workload`:
+          node.data.type = `ellipse`;
+          break;
+        case `unknown`:
+          node.data.type = `round-diamond`;
+          break;
+        default:
+          node.data.type = `round-tag`;
+      }      
+    });
+  }
+
+  addDataOpacity(nodes: any): void {
+    nodes.forEach((node: any) => {
+      if (node.data.isUnused) {
+        node.data.opacity = 0.5;
+        node.data.borderStyle = `dashed`;
+        return;
+      }
+      node.data.opacity = 1;
+      node.data.borderStyle = `solid`;
     });
   }
 
@@ -143,7 +221,7 @@ export class AccordionGraph extends LitElement {
         sticky,
       ],
       arrow: true,
-      placement: `bottom`,
+      placement: theme === `parent` ? `top` : `bottom`,
       hideOnClick: false,
       multiple: false,
       sticky: true,
@@ -244,6 +322,7 @@ export class AccordionGraph extends LitElement {
     .graph {
       flex: 1 1 auto;
       overflow: hidden;
+      background-color: rgb(242, 242, 242);
     }
 
     .info {
@@ -348,24 +427,17 @@ export class AccordionGraph extends LitElement {
       border-radius: 3px;
       border-width: 1px;
     }
-
-    .parent-theme {      
-      transform: translate3d(0, 20px, 0);
-    }
     
     .child-theme .tippy-content {
       align-items: center;
-      background-color: #fffa;
+      background-color: #fff;
+      color: #030303;
+      box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.2), 0 2px 8px 0 rgba(0, 0, 0, 0.19);
       border-radius: 3px;
       border-width: 1px;
-      color: #030303;
       display: flex;
       font-size: 8px;
       padding: 3px 5px;
-    }
-    
-    .child-theme {      
-      transform: translate3d(0, -10px, 0);
-    }
+    }    
   `;
 }
