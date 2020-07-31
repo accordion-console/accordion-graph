@@ -18,7 +18,7 @@
     }
 
     #demo {
-      width: 1200px;
+      width: 80vw;
       height: 600px;
     }  
   </style>
@@ -26,12 +26,13 @@
 <body>
   <div id="demo"></div>
 
-  <script type="module">
-    import { html, render } from 'lit-html';
-    import './dist/accordion-graph.js';
-
+  <script>
     // eslint-disable-next-line no-undef
     window.process = {env: {NODE_ENV: 'production'}}
+  </script>
+  <script type="module">    
+    import { html, render } from 'lit-html';
+    import './dist/accordion-graph.js';    
 
     render(
       html`

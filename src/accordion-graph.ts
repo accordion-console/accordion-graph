@@ -1,4 +1,5 @@
-import { html, css, LitElement, PropertyDeclarations, queryAll, } from 'lit-element';
+import { html, LitElement, PropertyDeclarations, queryAll, } from 'lit-element';
+import { css, injectGlobal, } from 'emotion';
 import '@material/mwc-select';
 import '@material/mwc-list/mwc-list-item';
 import '@material/mwc-button';
@@ -30,6 +31,14 @@ export enum NodeType {
   WORKLOAD = 'workload'
 }
 
+export const isCore = (target: cytoscape.NodeSingular | cytoscape.EdgeSingular | cytoscape.Core): target is cytoscape.Core => {
+  return !('cy' in target);
+};
+
+export const isNode = (target: cytoscape.NodeSingular | cytoscape.EdgeSingular | cytoscape.Core): target is cytoscape.NodeSingular => {
+  return !isCore(target) && target.isNode();
+};
+
 export class AccordionGraph extends LitElement {  
   static get properties(): PropertyDeclarations {
     return {
@@ -53,6 +62,7 @@ export class AccordionGraph extends LitElement {
 
   disconnectedCallback(): void {
     this.cy?.destroy();
+    this.cy = undefined;
     super.disconnectedCallback();
   }
 
@@ -64,14 +74,15 @@ export class AccordionGraph extends LitElement {
     this.setCustomStyleMwcSelect();
   }
 
+  // ISSUE: https://github.com/cytoscape/cytoscape.js/issues/2081
+  // don't use shadow dom
+  createRenderRoot() {
+    return this;
+  }
+
   async initCytoscape(): Promise<void> {
     // NOTE: Kiali Graph API Parameter
-    // duration
-    // graphType
-    // injectServiceNodes
-    // groupBy
-    // appenders
-    // namespaces
+    // duration, graphType, injectServiceNodes, groupBy, appenders, namespaces
     const data = await fetch('/server/namespaces/graph?duration=21600s&graphType=app&injectServiceNodes=true&groupBy=app&appenders=deadNode,sidecarsCheck,serviceEntry,istio,unusedNode,securityPolicy&namespaces=book-info').then( res => res.json() );
     const { elements } = data;
     const { nodes } = elements;
@@ -81,7 +92,7 @@ export class AccordionGraph extends LitElement {
     this.addDataOpacity(nodes);
 
     this.cy = cytoscape({
-      container: this.shadowRoot?.querySelector(`.graph`),
+      container: this?.querySelector(`.graph`),
       elements: elements,
       boxSelectionEnabled: false,
       autounselectify: true,
@@ -135,18 +146,14 @@ export class AccordionGraph extends LitElement {
         nodeDimensionsIncludeLabels: true,
         rankDir: 'LR'
       }    
-    });
+    });  
 
     this.cy.autolock(true);
 
-    this.initTippy(elements.nodes);  
-    this.cy.on('zoom', (event) => {
-      const zoom = event.cy.zoom();
+    this.addZoomEventListener();
+    this.addMouseoverEventListener();
 
-      this.shadowRoot.querySelectorAll(`.tippy-content`).forEach(tooltip => {
-        (tooltip as HTMLElement).style.transform = `scale(${zoom / 1.7})`;
-      });
-    });
+    this.initTippy(elements.nodes);    
   }
 
   addDataNodeType(nodes: any): void {
@@ -227,18 +234,35 @@ export class AccordionGraph extends LitElement {
       sticky: true,
       interactive: false,
       theme: theme,
-      boundary: this.shadowRoot.querySelector(`.graph`) as HTMLElement,
-      appendTo: this.shadowRoot.querySelector(`.graph`),
+      boundary: this.querySelector(`.graph`) as HTMLElement,
+      appendTo: this.querySelector(`.graph`),
       popperOptions: {
         modifiers: {
           preventOverflow: {
-            boundariesElement: this.shadowRoot.querySelector(`.graph`) as HTMLElement,
+            boundariesElement: this.querySelector(`.graph`) as HTMLElement,
           }
         }
-      }
+      },
+      zIndex: 1,
     });
 
     return tip;
+  }
+
+  addZoomEventListener(): void {
+    this.cy.on('zoom', (event) => {
+      const zoom = event.cy.zoom();
+
+      this.querySelectorAll(`.tippy-content`).forEach(tooltip => {
+        (tooltip as HTMLElement).style.transform = `scale(${zoom / 1.7})`;
+      });
+    });
+  }
+
+  addMouseoverEventListener(): void {
+    this.cy.on('mouseover', 'node,edge', (event) => {
+      console.log(event);
+    });
   }
 
   // NOTE: mwc-select dont' have a custom-property, height.
@@ -254,7 +278,7 @@ export class AccordionGraph extends LitElement {
 
   render() {
     return html`
-    <div class="graph-wrap">
+    <div class="graph-wrap ${this.styles()}">
       <div class="toolbar">
 
         <mwc-select class="namespace-filter" outlined label="namespace">
@@ -287,19 +311,13 @@ export class AccordionGraph extends LitElement {
     `;
   }
 
-  static styles = css`
-    :host {
-      display: flex;
-      width: 100%;
-      height: 100%;
-      background-color: #fff;      
-    }
-
+  styles() {
+    return css`
     .hide {
       display: none;
     }
 
-    .graph-wrap {
+    &.graph-wrap {
       display: flex;
       flex-direction: column;
       width: 100%;
@@ -323,6 +341,7 @@ export class AccordionGraph extends LitElement {
       flex: 1 1 auto;
       overflow: hidden;
       background-color: rgb(242, 242, 242);
+      position: static;
     }
 
     .info {
@@ -440,4 +459,14 @@ export class AccordionGraph extends LitElement {
       padding: 3px 5px;
     }    
   `;
+  }
 }
+
+injectGlobal`
+accordion-graph {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  background-color: #fff;  
+}
+`;

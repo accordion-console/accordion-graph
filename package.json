@@ -1,6 +1,6 @@
 {
   "name": "@accordion/accordion-graph",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": false,
   "description": "npm publish test",
   "author": "taeuk_kang",
@@ -34,6 +34,7 @@
     "concurrently": "^5.1.0",
     "cytoscape-dagre": "^2.2.2",
     "cytoscape-popper": "^1.0.7",
+    "emotion": "^10.0.27",
     "es-dev-commonjs-transformer": "^0.2.0",
     "es-dev-server": "^1.23.0",
     "eslint": "^6.1.0",
