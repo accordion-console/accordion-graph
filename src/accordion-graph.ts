@@ -1,8 +1,8 @@
-import { html, LitElement, PropertyDeclarations, queryAll, } from 'lit-element';
+import { html, LitElement, PropertyDeclarations, } from 'lit-element';
 import { css, injectGlobal, } from 'emotion';
-import '@material/mwc-select';
-import '@material/mwc-list/mwc-list-item';
-import '@material/mwc-button';
+// import '@material/mwc-select';
+// import '@material/mwc-list/mwc-list-item';
+// import '@material/mwc-button';
 import { IconOption, IconRefresh, } from './components/icon-element';
 import cytoscape from 'cytoscape';
 import dagre from 'cytoscape-dagre';
@@ -58,7 +58,7 @@ export class AccordionGraph extends LitElement {
 
   private cy?: cytoscape.Core;
 
-  @queryAll(`mwc-select`) protected selectBoxs!: HTMLElement[]|null;
+  selectBoxs!: NodeListOf<Element>|null;
 
   disconnectedCallback(): void {
     this.cy?.destroy();
@@ -67,6 +67,8 @@ export class AccordionGraph extends LitElement {
   }
 
   protected firstUpdated(): void {
+    this.selectBoxs = this.querySelectorAll(`mwc-select`);
+
     this.initCytoscape();
   }
 
@@ -83,7 +85,7 @@ export class AccordionGraph extends LitElement {
   async initCytoscape(): Promise<void> {
     // NOTE: Kiali Graph API Parameter
     // duration, graphType, injectServiceNodes, groupBy, appenders, namespaces
-    const data = await fetch('/server/namespaces/graph?duration=21600s&graphType=app&injectServiceNodes=true&groupBy=app&appenders=deadNode,sidecarsCheck,serviceEntry,istio,unusedNode,securityPolicy&namespaces=book-info').then( res => res.json() );
+    const data = await fetch('/kiali/namespaces/graph?duration=21600s&graphType=app&injectServiceNodes=true&groupBy=app&appenders=deadNode,sidecarsCheck,serviceEntry,istio,unusedNode,securityPolicy&namespaces=book-info').then( res => res.json() );
     const { elements } = data;
     const { nodes } = elements;
     console.log(data);
@@ -136,8 +138,8 @@ export class AccordionGraph extends LitElement {
             'curve-style': 'straight',
             'target-arrow-shape': 'triangle-backcurve',
             "arrow-scale": 0.5,
-            'width': 1,
-          }
+            'width': 1
+          },
         },
       ],    
       layout: {
@@ -235,7 +237,7 @@ export class AccordionGraph extends LitElement {
       interactive: false,
       theme: theme,
       boundary: this.querySelector(`.graph`) as HTMLElement,
-      appendTo: this.querySelector(`.graph`),
+      appendTo: document.body,
       popperOptions: {
         modifiers: {
           preventOverflow: {
@@ -253,27 +255,89 @@ export class AccordionGraph extends LitElement {
     this.cy.on('zoom', (event) => {
       const zoom = event.cy.zoom();
 
-      this.querySelectorAll(`.tippy-content`).forEach(tooltip => {
+      document.querySelectorAll(`body > .tippy-popper .tippy-content`).forEach(tooltip => {
         (tooltip as HTMLElement).style.transform = `scale(${zoom / 1.7})`;
       });
     });
   }
 
   addMouseoverEventListener(): void {
-    this.cy.on('mouseover', 'node,edge', (event) => {
-      console.log(event);
-    });
+    this.cy.on('mouseover', 'node', (event) => {    
+      const blurColor = `#dfe4ea`;
+
+      this.setBlurStyle(this.cy, {
+        'background-color': blurColor,
+        'line-color': blurColor,
+        'source-arrow-color': blurColor,
+        'color': blurColor
+      });
+
+      this.setFocus(event.target);
+    });    
+
+    this.cy.on('mouseout', 'node', () => {    
+      this.setResetFocus();
+    }); 
   }
 
   // NOTE: mwc-select dont' have a custom-property, height.
   async setCustomStyleMwcSelect(): Promise<void> {
     await this.updateComplete;
     const selectBoxs = this.selectBoxs;
-    selectBoxs?.forEach(selectBox => {
+    selectBoxs.forEach(selectBox => {
       // NOTE: fix ie11 css
-      (selectBox.shadowRoot?.querySelector(`.mdc-select__anchor`) as HTMLElement).style.width = `180px`;
       (selectBox.shadowRoot?.querySelector(`.mdc-select__anchor`) as HTMLElement).style.height = `30px`;      
     });    
+  }
+
+  setBlurStyle(cy: cytoscape.Core, style: any) {
+    cy.nodes().forEach((target) => {
+        target.style(style);
+    });
+  }
+
+  setFocus(target: any) {
+    const successorColor = 'rgb(222, 243, 255)';
+    const predecessorsColor = 'rgb(222, 243, 255)';
+    const nodeColor = '#fff';
+    const nodeActiveColor = 'rgb(222, 243, 255)';
+
+    target.style('background-color', nodeActiveColor);
+    target.style('color', nodeColor);
+    this.setOpacityElement(target, 1);
+    target.successors().each((event: any) => {
+        // 상위  엣지와 노드
+        event.style('color', nodeColor);
+        event.style('background-color', successorColor);
+        this.setOpacityElement(event, 0.5);
+    }
+    );
+    target.predecessors().each((event: any) => {
+        // 하위 엣지와 노드
+        event.style('color', nodeColor);
+        event.style('background-color', predecessorsColor);
+        this.setOpacityElement(event, 0.5);
+    });
+    target.neighborhood().each((event: any) => {
+        // 이웃한 엣지와 노드
+        this.setOpacityElement(event, 1);
+    }
+    );
+  }
+
+  setOpacityElement(target: any, degree: number) {
+    target.style('opacity', degree);
+  }
+
+  setResetFocus() {
+    this.cy.nodes().forEach((target) => {
+        target.style('background-color', `#fff`);
+        target.style('color', `#fff`);
+        target.style('opacity', 1);
+    });
+    this.cy.edges().forEach((target) => {
+        target.style('opacity', 1);
+    });
   }
 
   render() {
@@ -322,6 +386,7 @@ export class AccordionGraph extends LitElement {
       flex-direction: column;
       width: 100%;
       height: 100%;
+      background-color: #fff;
     }
 
     .toolbar {
@@ -358,7 +423,6 @@ export class AccordionGraph extends LitElement {
 
     .namespace-filter,
     .graph-type {      
-      width: 180px;
       margin: 10px;
       margin-top: 30px;
       height: 30px;
@@ -458,10 +522,18 @@ export class AccordionGraph extends LitElement {
       font-size: 8px;
       padding: 3px 5px;
     }    
+
+    mwc-button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
   `;
   }
 }
 
+// ISSUE: https://github.com/cytoscape/cytoscape.js/issues/2081
+// don't use shadow dom
 injectGlobal`
 accordion-graph {
   display: flex;
@@ -469,4 +541,32 @@ accordion-graph {
   height: 100%;
   background-color: #fff;  
 }
+
+.tippy-tooltip[data-out-of-boundaries] {
+  opacity: 0;
+}
+
+.parent-theme .tippy-content {
+  border-radius: 3px;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.2), 0 2px 8px 0 rgba(0, 0, 0, 0.19);
+  display: flex;
+  background-color: #393f44;
+  color: #fff;
+  font-size: 11px;
+  padding: 3px 5px;
+  border-radius: 3px;
+  border-width: 1px;
+}
+
+.child-theme .tippy-content {
+  align-items: center;
+  background-color: #fff;
+  color: #030303;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.2), 0 2px 8px 0 rgba(0, 0, 0, 0.19);
+  border-radius: 3px;
+  border-width: 1px;
+  display: flex;
+  font-size: 8px;
+  padding: 3px 5px;
+}    
 `;
