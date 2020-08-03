@@ -17,9 +17,9 @@ module.exports = {
     ]),
   ],  
   middlewares: [
-    proxy('/server', {
+    proxy('/kiali', {
       target: 'http://10.20.200.201:30021/kiali/api',
-      rewrite: (path) => path.replace(/^\/server/, ""),
+      rewrite: (path) => path.replace(/^\/kiali/, ""),
     }),
   ],
   moduleDirs: ['node_modules'],
