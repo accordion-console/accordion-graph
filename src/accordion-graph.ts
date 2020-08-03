@@ -153,7 +153,7 @@ export class AccordionGraph extends LitElement {
     this.cy.autolock(true);
 
     this.addZoomEventListener();
-    this.addMouseoverEventListener();
+    this.addMouseoverAndOutEventListener();
 
     this.initTippy(elements.nodes);    
   }
@@ -261,8 +261,8 @@ export class AccordionGraph extends LitElement {
     });
   }
 
-  addMouseoverEventListener(): void {
-    this.cy.on('mouseover', 'node', (event) => {    
+  addMouseoverAndOutEventListener(): void {
+    this.cy.on('mouseover', 'node,edge', (event) => {    
       const blurColor = `#dfe4ea`;
 
       this.setBlurStyle(this.cy, {
@@ -275,7 +275,7 @@ export class AccordionGraph extends LitElement {
       this.setFocus(event.target);
     });    
 
-    this.cy.on('mouseout', 'node', () => {    
+    this.cy.on('mouseout', 'node,edge', () => {    
       this.setResetFocus();
     }); 
   }
@@ -305,8 +305,14 @@ export class AccordionGraph extends LitElement {
     target.style('background-color', nodeActiveColor);
     target.style('color', nodeColor);
     this.setOpacityElement(target, 1);
+    
+    target.connectedNodes().each((event: any) => {
+      event.style('color', nodeColor);
+      event.style('background-color', successorColor);
+    });
+
     target.successors().each((event: any) => {
-        // 상위  엣지와 노드
+        // 상위  엣지와 노드        
         event.style('color', nodeColor);
         event.style('background-color', successorColor);
         this.setOpacityElement(event, 0.5);
