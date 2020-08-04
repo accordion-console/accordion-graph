@@ -15,6 +15,7 @@ module.exports = {
     '@typescript-eslint/no-non-null-assertion': 'off',
     'import/named': 'off',
     'import/no-unresolved': 'off',
-    '@typescript-eslint/no-explicit-any': 'off'
+    '@typescript-eslint/no-explicit-any': 'off',
+    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
   },
 };
