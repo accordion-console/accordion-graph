@@ -7,10 +7,13 @@ import { IconOption, IconRefresh, } from './components/icon-element';
 import cytoscape from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 import popper from 'cytoscape-popper';
+import cyCanvas from 'cytoscape-canvas';
 import tippy, { sticky, } from 'tippy.js';
+import TrafficRender from './components/traffic-renderer';
 
 cytoscape.use(dagre);
 cytoscape.use(popper);
+cytoscape.use(cyCanvas);
 
 export interface NodesData {
   data: {
@@ -57,17 +60,23 @@ export class AccordionGraph extends LitElement {
   selectedGraphTypeIndex = 0;
 
   private cy?: cytoscape.Core;
+  private data: any;
+  private trafficRenderer?: TrafficRender;
 
   selectBoxs!: NodeListOf<Element>|null;
 
   disconnectedCallback(): void {
     this.cy?.destroy();
     this.cy = undefined;
+    this.data = undefined;
     super.disconnectedCallback();
   }
 
-  protected firstUpdated(): void {
+  protected async firstUpdated(): Promise<void> {
     this.selectBoxs = this.querySelectorAll(`mwc-select`);
+    // NOTE: Kiali Graph API Parameter
+    // duration, graphType, injectServiceNodes, groupBy, appenders, namespaces    
+    this.data = await fetch('/kiali/namespaces/graph?duration=21600s&graphType=app&injectServiceNodes=true&groupBy=app&appenders=deadNode,sidecarsCheck,serviceEntry,istio,unusedNode,securityPolicy&namespaces=book-info').then( res => res.json() );
 
     this.initCytoscape();
   }
@@ -82,13 +91,10 @@ export class AccordionGraph extends LitElement {
     return this;
   }
 
-  async initCytoscape(): Promise<void> {
-    // NOTE: Kiali Graph API Parameter
-    // duration, graphType, injectServiceNodes, groupBy, appenders, namespaces
-    const data = await fetch('/kiali/namespaces/graph?duration=21600s&graphType=app&injectServiceNodes=true&groupBy=app&appenders=deadNode,sidecarsCheck,serviceEntry,istio,unusedNode,securityPolicy&namespaces=book-info').then( res => res.json() );
-    const { elements } = data;
+  async initCytoscape(): Promise<void> {    
+    const { elements } = this.data;
     const { nodes } = elements;
-    console.log(data);
+    console.log(this.data);
 
     this.addDataNodeType(nodes);
     this.addDataOpacity(nodes);
@@ -138,7 +144,13 @@ export class AccordionGraph extends LitElement {
             'curve-style': 'straight',
             'target-arrow-shape': 'triangle-backcurve',
             "arrow-scale": 0.5,
-            'width': 1
+            'width': 1,
+            'color': 'white',
+            'font-size': 8,
+            'text-outline-width': 0.7,
+            'text-transform': 'uppercase',
+            'text-outline-color': '#666',
+            'text-wrap': 'wrap',
           },
         },
       ],    
@@ -156,6 +168,15 @@ export class AccordionGraph extends LitElement {
     this.addMouseoverAndOutEventListener();
 
     this.initTippy(elements.nodes);    
+
+    this.trafficRenderer = new TrafficRender(this.cy, this.cy.edges());
+
+    this.trafficRenderer!.start();
+
+    this.cy.on('destroy', (_event: cytoscape.EventObject) => {
+      this.trafficRenderer!.stop();
+      this.cy = undefined;
+    });
   }
 
   addDataNodeType(nodes: any): void {
@@ -286,49 +307,88 @@ export class AccordionGraph extends LitElement {
     const selectBoxs = this.selectBoxs;
     selectBoxs.forEach(selectBox => {
       // NOTE: fix ie11 css
-      (selectBox.shadowRoot?.querySelector(`.mdc-select__anchor`) as HTMLElement).style.height = `30px`;      
+      (selectBox?.shadowRoot?.querySelector(`.mdc-select__anchor`) as HTMLElement).style.height = `30px`;      
     });    
   }
 
   setBlurStyle(cy: cytoscape.Core, style: any) {
     cy.nodes().forEach((target) => {
-        target.style(style);
+        target.style(style);        
     });
+
+    cy.edges().forEach((target) => {
+      target.addClass(`mousedim`);
+      this.setOpacityElement(target, 0.5);
+  });
   }
 
   setFocus(target: any) {
-    const successorColor = 'rgb(222, 243, 255)';
-    const predecessorsColor = 'rgb(222, 243, 255)';
+    const selectedColor = 'rgb(222, 243, 255)';
+    const successorColor = selectedColor;
+    const predecessorsColor = selectedColor;
     const nodeColor = '#fff';
-    const nodeActiveColor = 'rgb(222, 243, 255)';
+    const nodeActiveColor = selectedColor;
 
     target.style('background-color', nodeActiveColor);
     target.style('color', nodeColor);
-    this.setOpacityElement(target, 1);
-    
+    target.removeClass(`mousedim`);
+    this.setOpacityElement(target, 1);    
+
+    if (target.isParent()) {      
+      target.style('background-color', `#fff`);
+
+      target.children().each((target2: any) => {        
+        target2.style('color', nodeColor);
+        target2.style('background-color', successorColor);
+
+        target2.connectedEdges().each((target3: any) => {
+          const protocol = target3.data().traffic.protocol;
+          const rates = target3.data().traffic.rates?.[protocol] ? `\n(${target3.data().traffic.rates?.[protocol]})` : ``;
+          // TODO: add PercentReq, responses
+
+          target3.style(`opacity`, 1);
+          target3.style(`label`, protocol + rates);
+          target3.removeClass(`mousedim`);
+        });
+
+        target2.neighborhood().each((target3: any) => {
+          target3.style('color', nodeColor);
+          target3.style('background-color', successorColor);
+        });
+      });          
+    }
+
+    if (target.isEdge()) {
+      const protocol = target.data().traffic.protocol;
+      const rates = target.data().traffic.rates?.[protocol] ? `\n(${target.data().traffic.rates?.[protocol]})` : ``;
+      // TODO: add PercentReq, responses
+
+      target.style(`opacity`, 1);
+      target.style(`label`, protocol + rates);
+      target.removeClass(`mousedim`);
+    }
+
     target.connectedNodes().each((event: any) => {
       event.style('color', nodeColor);
       event.style('background-color', successorColor);
     });
 
-    target.successors().each((event: any) => {
-        // 상위  엣지와 노드        
-        event.style('color', nodeColor);
-        event.style('background-color', successorColor);
-        this.setOpacityElement(event, 0.5);
-    }
-    );
-    target.predecessors().each((event: any) => {
-        // 하위 엣지와 노드
-        event.style('color', nodeColor);
-        event.style('background-color', predecessorsColor);
-        this.setOpacityElement(event, 0.5);
+    target.connectedEdges().each((target2: any) => {
+      const protocol = target2.data().traffic.protocol;
+      const rates = target2.data().traffic.rates?.[protocol] ? `\n(${target2.data().traffic.rates?.[protocol]})` : ``;
+      // TODO: add PercentReq, responses
+
+      target2.style(`opacity`, 1);
+      target2.style(`label`, protocol + rates);
+      target2.removeClass(`mousedim`);
     });
+
     target.neighborhood().each((event: any) => {
         // 이웃한 엣지와 노드
+        event.style('color', nodeColor);
+        event.style('background-color', predecessorsColor);
         this.setOpacityElement(event, 1);
-    }
-    );
+    });
   }
 
   setOpacityElement(target: any, degree: number) {
@@ -343,6 +403,10 @@ export class AccordionGraph extends LitElement {
     });
     this.cy.edges().forEach((target) => {
         target.style('opacity', 1);
+        if (!target.hasClass(`mousedim`)) {
+          target.style(`label`, ``);
+        }        
+        target.removeClass(`mousedim`);
     });
   }
 
@@ -412,7 +476,7 @@ export class AccordionGraph extends LitElement {
       flex: 1 1 auto;
       overflow: hidden;
       background-color: rgb(242, 242, 242);
-      position: static;
+      position: relative;
     }
 
     .info {
