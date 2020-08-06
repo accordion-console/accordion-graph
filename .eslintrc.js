@@ -17,5 +17,6 @@ module.exports = {
     'import/no-unresolved': 'off',
     '@typescript-eslint/no-explicit-any': 'off',
     "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    "import/no-duplicates": 'off',
   },
 };
