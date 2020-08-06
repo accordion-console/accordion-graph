@@ -1,8 +1,5 @@
 import { html, LitElement, PropertyDeclarations, } from 'lit-element';
 import { css, injectGlobal, } from 'emotion';
-// import '@material/mwc-select';
-// import '@material/mwc-list/mwc-list-item';
-// import '@material/mwc-button';
 import { IconOption, IconRefresh, } from './components/icon-element';
 import cytoscape from 'cytoscape';
 import dagre from 'cytoscape-dagre';
@@ -10,6 +7,9 @@ import popper from 'cytoscape-popper';
 import cyCanvas from 'cytoscape-canvas';
 import tippy, { sticky, } from 'tippy.js';
 import TrafficRender from './components/traffic-renderer';
+import './components/context-menu';
+import { AccordionGraphContextMenu } from './components/context-menu';
+import './components/accordion-select';
 
 cytoscape.use(dagre);
 cytoscape.use(popper);
@@ -62,6 +62,7 @@ export class AccordionGraph extends LitElement {
   private cy?: cytoscape.Core;
   private data: any;
   private trafficRenderer?: TrafficRender;
+  private resizeTimer: number;
 
   selectBoxs!: NodeListOf<Element>|null;
 
@@ -165,7 +166,7 @@ export class AccordionGraph extends LitElement {
     this.cy.autolock(true);
 
     this.addZoomEventListener();
-    this.addMouseoverAndOutEventListener();
+    this.addMouseEventListeners();
 
     this.initTippy(elements.nodes);    
 
@@ -276,13 +277,13 @@ export class AccordionGraph extends LitElement {
     this.cy.on('zoom', (event) => {
       const zoom = event.cy.zoom();
 
-      document.querySelectorAll(`body > .tippy-popper .tippy-content`).forEach(tooltip => {
+      document.querySelectorAll(`body > .tippy-popper:not([x-placement="right"]) .tippy-content`).forEach(tooltip => {
         (tooltip as HTMLElement).style.transform = `scale(${zoom / 1.7})`;
       });
     });
   }
 
-  addMouseoverAndOutEventListener(): void {
+  addMouseEventListeners(): void {
     this.cy.on('mouseover', 'node,edge', (event) => {    
       const blurColor = `#dfe4ea`;
 
@@ -299,8 +300,55 @@ export class AccordionGraph extends LitElement {
     this.cy.on('mouseout', 'node,edge', () => {    
       this.setResetFocus();
     }); 
+
+    this.cy.on(`cxttap`, `node`, (node) => {
+      const tippy = this.makeContextMenu(node.target);
+      tippy.show();
+    });
   }
 
+  makeContextMenu(node: cytoscape.NodeSingular) {
+    const ref = node.popperRef();
+    const dummyDomEle = document.createElement('div');
+
+    const tip = tippy(dummyDomEle, {
+      onCreate: (instance) => {
+        instance.popperInstance.reference = ref;
+      },
+      lazy: false,
+      trigger: 'manual',
+
+      content: () => {
+        const contextMenu: AccordionGraphContextMenu = (document.createElement('accordion-graph-context-menu') as AccordionGraphContextMenu);
+
+        contextMenu.name = node.data().app;
+
+        return contextMenu;
+      },
+      plugins: [
+        sticky,
+      ],
+      arrow: true,
+      placement: `right`,
+      hideOnClick: false,
+      multiple: false,
+      sticky: true,
+      interactive: false,
+      boundary: this.querySelector(`.graph`) as HTMLElement,
+      appendTo: document.body,
+      popperOptions: {
+        modifiers: {
+          preventOverflow: {
+            boundariesElement: this.querySelector(`.graph`) as HTMLElement,
+          }
+        }
+      },
+      zIndex: 1,
+    });
+
+    return tip;
+  }
+  
   // NOTE: mwc-select dont' have a custom-property, height.
   async setCustomStyleMwcSelect(): Promise<void> {
     await this.updateComplete;
@@ -411,17 +459,12 @@ export class AccordionGraph extends LitElement {
   }
 
   render() {
-    return html`
+    return html`    
     <div class="graph-wrap ${this.styles()}">
       <div class="toolbar">
+        <accordion-select class="namespace-filter" title="namespace" .data="${this.namespaceList}"></accordion-select>        
 
-        <mwc-select class="namespace-filter" outlined label="namespace">
-          ${this.namespaceList.map((item, index) => html`<mwc-list-item ?selected=${this.selectedNamespaceIndex === index} value="${index}">${item}</mwc-list-item>`)}          
-        </mwc-select>
-
-        <mwc-select class="graph-type" outlined label="Graph Type">
-          ${this.graphType.map((item, index) => html`<mwc-list-item ?selected=${this.selectedNamespaceIndex === index} value="${index}">${item}</mwc-list-item>`)}          
-        </mwc-select>
+        <accordion-select class="namespace-filter" title="Graph Type" .data="${this.graphType}"></accordion-select>        
 
         <!-- NOTE: Find / Hide Search Input -->
         <!-- <div class="find-or-hide">
@@ -429,9 +472,9 @@ export class AccordionGraph extends LitElement {
           <input class="search--hide" type="search" placeholder="Hide"/>
         </div> -->
 
-        <mwc-button class="option-button" label="">${IconOption}</mwc-button>
+        <button class="option-button">${IconOption}</button>
 
-        <mwc-button class="refresh-button" label="">${IconRefresh}</mwc-button>
+        <button class="refresh-button">${IconRefresh}</button>
       </div>
       <div class="graph-or-info">
         <div class="graph">
@@ -491,13 +534,6 @@ export class AccordionGraph extends LitElement {
       border: 1px solid rgb(224, 224, 224);
     }
 
-    .namespace-filter,
-    .graph-type {      
-      margin: 10px;
-      margin-top: 30px;
-      height: 30px;
-    }
-
     mwc-select {
       --mdc-menu-item-height: 30px;
       --mdc-theme-primary: rgb(65, 61, 143);
@@ -539,14 +575,25 @@ export class AccordionGraph extends LitElement {
     .option-button,
     .refresh-button {
       display: flex;
-      align-self: center;      
+      align-items: center;
+      justify-content: center;
+      background-color: transparent;
+      cursor: pointer;
       color: #666;
       width: 60px;
       height: 40px;
+      outline: none;
+      border-radius: 4px;
 
       border: none;
       margin-top: auto;
       margin-bottom: auto;      
+    }
+
+    .option-button:hover,
+    .refresh-button:hover {
+      color: #777a;
+      background-color: #eeea;
     }
 
     .icon-option,
