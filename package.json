@@ -7,7 +7,7 @@
   "license": "MIT",
   "main": "index.js",
   "module": "index.js",
-  "types" : "index.d.ts",
+  "types": "index.d.ts",
   "scripts": {
     "start": "concurrently --kill-others --names tsc,es-dev-server \"npm run tsc:watch\" \"es-dev-server --config ./es-dev-server.config.js\"",
     "tsc:watch": "tsc --watch",
@@ -23,6 +23,7 @@
     "@material/mwc-list": "^0.17.2",
     "@material/mwc-select": "^0.17.2",
     "@types/cytoscape": "^3.14.7",
+    "bulma": "^0.9.0",
     "cytoscape": "^3.15.2",
     "cytoscape-canvas": "^3.0.1",
     "cytoscape-dagre": "^2.2.2",

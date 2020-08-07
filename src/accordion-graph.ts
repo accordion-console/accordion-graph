@@ -10,6 +10,8 @@ import TrafficRender from './components/traffic-renderer';
 import './components/context-menu';
 import { AccordionGraphContextMenu } from './components/context-menu';
 import './components/accordion-select';
+import './components/option-modal';
+import { AccordionOptionModal } from './components/option-modal';
 
 cytoscape.use(dagre);
 cytoscape.use(popper);
@@ -61,20 +63,24 @@ export class AccordionGraph extends LitElement {
 
   private cy?: cytoscape.Core;
   private data: any;
-  private trafficRenderer?: TrafficRender;
-  private resizeTimer: number;
+  private trafficRenderer?: TrafficRender;  
 
   selectBoxs!: NodeListOf<Element>|null;
+  optionModal!: AccordionOptionModal|null;
 
   disconnectedCallback(): void {
     this.cy?.destroy();
     this.cy = undefined;
     this.data = undefined;
+    this.selectBoxs = undefined;
+    this.optionModal = undefined;
     super.disconnectedCallback();
   }
 
   protected async firstUpdated(): Promise<void> {
     this.selectBoxs = this.querySelectorAll(`mwc-select`);
+    this.optionModal = this.querySelector(`accordion-option-modal`);
+
     // NOTE: Kiali Graph API Parameter
     // duration, graphType, injectServiceNodes, groupBy, appenders, namespaces    
     this.data = await fetch('/kiali/namespaces/graph?duration=21600s&graphType=app&injectServiceNodes=true&groupBy=app&appenders=deadNode,sidecarsCheck,serviceEntry,istio,unusedNode,securityPolicy&namespaces=book-info').then( res => res.json() );
@@ -472,7 +478,10 @@ export class AccordionGraph extends LitElement {
           <input class="search--hide" type="search" placeholder="Hide"/>
         </div> -->
 
-        <button class="option-button">${IconOption}</button>
+        <button 
+          class="option-button"
+          @click=${() => this.optionModal.show = !this.optionModal.show || true}
+        >${IconOption}</button>
 
         <button class="refresh-button">${IconRefresh}</button>
       </div>
@@ -484,7 +493,8 @@ export class AccordionGraph extends LitElement {
         
         </div>
       </div>
-    </div>
+      <accordion-option-modal></accordion-option-modal>
+    </div>    
     `;
   }
 
@@ -500,6 +510,7 @@ export class AccordionGraph extends LitElement {
       width: 100%;
       height: 100%;
       background-color: #fff;
+      position: relative;
     }
 
     .toolbar {

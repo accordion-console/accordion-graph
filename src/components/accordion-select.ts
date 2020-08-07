@@ -1,4 +1,4 @@
-import { html, TemplateResult, customElement, LitElement, PropertyDeclarations, CSSResult, css, } from 'lit-element';
+import { html, TemplateResult, customElement, LitElement, PropertyDeclarations, CSSResult, css, eventOptions, } from 'lit-element';
 
 @customElement('accordion-select')
 export class AccordionSelect extends LitElement {
@@ -6,108 +6,77 @@ export class AccordionSelect extends LitElement {
     return {
       title: { type: String, },
       data: { type: Array, },
+      selectedIndex: { type: Number, },
+      clicked: { type: Boolean, },
     };
   }
 
   title: string;
   data: string[];
+  selectedIndex: number;
+  clicked: boolean;
+
+  private handler: any;
 
   constructor() {
     super();  
     this.title = `Title`;
     this.data = [`test1`,`test2`];
+    this.selectedIndex = 0;
+    this.clicked = false;
+
+    this.handler = {};
   }
 
   disconnectedCallback() {
+    document.removeEventListener(`click`, this.handler.onClickCloseAll);
+    this.handler = undefined;
     super.disconnectedCallback();
   }
 
-  protected firstUpdated(): void {    
-    this.init();
-  }
-
-  init(): void {
-    const customSelectDiv = this.shadowRoot.querySelector(`.custom-select`);
-    const selects = this.shadowRoot.querySelector(`select`);
-    const selectedItem = document.createElement(`div`);
-    selectedItem.classList.add(`select-selected`);
-    selectedItem.textContent = selects.options[selects.selectedIndex].textContent;    
-    customSelectDiv.appendChild(selectedItem);
-
-    const hideItem = document.createElement(`div`);
-    hideItem.classList.add(`select-items`);
-    hideItem.classList.add(`select-hide`);      
-
-    for (let i = 0; i < selects.length; i++) {
-      const div = document.createElement(`div`);
-      div.textContent = selects.options[i].textContent;
-      div.addEventListener(`click`, (event: Event) => {
-        const { target } = event;
-        const selectElement = selects;
-        const length = selectElement.length;
-        const h = (target as HTMLElement).parentNode.previousSibling;
-        let sameSelected: NodeListOf<HTMLElement>;
-
-        for (let j = 0; j < length; j++) {
-          if (selectElement.options[j].textContent === (target as HTMLElement).textContent) {
-            selectElement.selectedIndex = j;
-            h.textContent = (target as HTMLElement).textContent;
-            sameSelected = (target as HTMLElement).parentNode.querySelectorAll(`.same-as-selected`);
-
-            for (let k = 0; k < sameSelected.length; k++) {
-              sameSelected[k].removeAttribute(`class`);
-            }
-            (target as HTMLElement).classList.add(`same-as-selected`);
-            break;
-          }          
-        }        
-        (h as HTMLInputElement).click();
-      });
-
-      hideItem.appendChild(div);  
-    }
-    customSelectDiv.appendChild(hideItem);
-    selectedItem.addEventListener(`click`, (event: Event) => {
-      const { target } = event;
-      event.stopPropagation();
-      this.closeAllSelect((event.target as HTMLElement));
-      ((target as HTMLElement).nextSibling as HTMLElement).classList.toggle(`select-hide`);
-      (target as HTMLElement).classList.toggle(`select-arrow-active`);
-    });
-  }
-
-  closeAllSelect(element: HTMLElement): void {
-    const items = this.shadowRoot.querySelectorAll(`.select-items`);
-    const selectedItems = this.shadowRoot.querySelectorAll(`.select-selected`);
-    const array = [];
+  @eventOptions({ capture: false, })
+  onClickSelect(event: Event): void {
+    const { currentTarget, target } = event;
     
-    for (let i = 0; i < selectedItems.length; i++) {
-      if (element === selectedItems[i]) {
-        array.push(i);
-      } else {
-        selectedItems[i].classList.remove(`select-arrow-active`);
-      }
+    if (this.clicked && (target as HTMLElement).classList.contains(`custom-select`)) {      
+      this.clicked = false;
+      return;
     }
 
-    for (let i = 0; i < items.length; i++) {
-      if (array.indexOf(i)) {
-        items[i].classList.add(`select-hide`);
-      }
-    }
+    this.clicked = !this.clicked;
+    (currentTarget as HTMLButtonElement).focus();
+    
+    currentTarget.addEventListener(`blur`, () => {
+      this.clicked = false;
+    }, { once: true, });
   }
 
-  getValue(): string {
-    return this.shadowRoot.querySelector(`.select-selected`).textContent;
+  @eventOptions({})
+  onClickItem(event: Event, index: number): void {
+    event.stopImmediatePropagation();
+
+    this.selectedIndex = index;
+    this.clicked = false;
   }
 
   protected render(): TemplateResult {
     return html`
-      <div class="custom-select">
+      <button 
+        class="custom-select"
+        @click=${this.onClickSelect}
+      >
         <strong class="title">${this.title}</strong>
-        <select>
+        <!-- <select>
           ${this.data.map((text, index) => html`<option value="${index}">${text}</option>`)}          
-        </select>
-      </div>
+        </select> -->
+
+        <div class="select-selected ${this.clicked ? `clicked` : ``}">
+          ${this.data[this.selectedIndex]}
+          <div class="select-items ${this.clicked ? `` : `select-hide`}">
+            ${this.data.map((text, index) => html`<div @click=${(event: Event) => this.onClickItem(event, index)}>${text}</div>`)}
+          </div>
+        </div>
+      </button>
     `;
   }
 
@@ -143,7 +112,9 @@ export class AccordionSelect extends LitElement {
     }
     
     .select-selected {
+      color: #666;
       background-color: rgba(0, 0, 0, 0.1);
+      text-align: left;
     }
     
     .select-selected:after {
@@ -157,12 +128,12 @@ export class AccordionSelect extends LitElement {
       border-color: #666 transparent transparent transparent;
     }
     
-    .select-selected.select-arrow-active:after {
+    .select-selected.clicked:after {
       border-color: transparent transparent #666 transparent;
       top: 10px;
     }
         
-    .select-selected {
+    .custom-select {
       background-color: #fff;
       padding: 8px 16px;
       color: #333;
@@ -171,6 +142,15 @@ export class AccordionSelect extends LitElement {
       cursor: pointer;
       user-select: none;
       padding-right: 50px;
+
+      width: 180px;
+      box-sizing: border-box;
+    }
+
+    .select-selected {
+      border: none;
+      outline: none;
+      background-color: transparent;
     }
 
     .select-items > div:first-child {
@@ -182,7 +162,9 @@ export class AccordionSelect extends LitElement {
       padding: 8px 16px;
       color: #333;
       cursor: pointer;
-      user-select: none;      
+      user-select: none;
+      text-align: left;
+      padding-left: 20px;
     }
     
     .select-items {
