@@ -5,21 +5,26 @@ import cytoscape from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 import popper from 'cytoscape-popper';
 import cyCanvas from 'cytoscape-canvas';
-import tippy, { sticky, } from 'tippy.js';
+import tippy, { sticky, Instance, } from 'tippy.js';
 import TrafficRender from './components/traffic-renderer';
 import './components/context-menu';
 import { AccordionGraphContextMenu } from './components/context-menu';
 import './components/accordion-select';
 import './components/option-modal';
 import { AccordionOptionModal } from './components/option-modal';
+import { AccordionSelect } from './components/accordion-select';
+import nodeHtmlLabel from 'cy-node-html-label';
 
 cytoscape.use(dagre);
 cytoscape.use(popper);
 cytoscape.use(cyCanvas);
+nodeHtmlLabel(cytoscape);
 
 export interface NodesData {
   data: {
     app?: string;
+    service?: string;
+    workload?: string;
     id?: string;
     isGroup?: string;
     namespace?: string;
@@ -47,23 +52,41 @@ export const isNode = (target: cytoscape.NodeSingular | cytoscape.EdgeSingular |
 export class AccordionGraph extends LitElement {  
   static get properties(): PropertyDeclarations {
     return {
+      kialiUrl: { type: String, },
       hideInfoBox: { type: Boolean, },
       namespaceList: { type: Array, },
       selectedNamespaceIndex: { type: Number, },
       graphType: { type: Array, },
       selectedGraphTypeIndex: { type: Number, },
+      
+      duration: { type: String, },
+      selectGraphType: { type : String, },
+      injectServiceNodes: { type: Boolean, },
+      groupBy: { type: String, },
+      appenders: { type: Array, },
+      namespaces: { type: String, },
+      requestType: { type: String, },
     }
   }
 
+  duration = `21600s`;
+  selectGraphType = `workload`;
+  injectServiceNodes = true;
+  groupBy = `app`;
+  appenders = [`deadNode`,`sidecarsCheck`,`serviceEntry`,`istio`,`unusedNode`,`securityPolicy`, `responseTime`];
+  namespaces = `book-info`;
+  kialiUrl = `/kiali/namespaces/graph`;    
   hideInfoBox = false;
-  namespaceList = [`namespace 1`, `namespace 2`];
+  namespaceList = [`istio-system`, `namespace 2`];
   selectedNamespaceIndex = 0;
   graphType = [`App`, `Versioned App`, `Service`, `Workload`];
   selectedGraphTypeIndex = 0;
+  requestType: `No Edge Labels` | `Requests per Seconds` | `Requests percentage` | `Response Time`;
 
   private cy?: cytoscape.Core;
-  private data: any;
-  private trafficRenderer?: TrafficRender;  
+  private data: any = {};
+  private trafficRenderer?: TrafficRender;
+  private tippys: Instance[] = [];
 
   selectBoxs!: NodeListOf<Element>|null;
   optionModal!: AccordionOptionModal|null;
@@ -74,21 +97,27 @@ export class AccordionGraph extends LitElement {
     this.data = undefined;
     this.selectBoxs = undefined;
     this.optionModal = undefined;
+    this.tippys.forEach(tippy => {
+      tippy.destroy();
+    });
+    this.tippys = undefined;
     super.disconnectedCallback();
   }
 
   protected async firstUpdated(): Promise<void> {
     this.selectBoxs = this.querySelectorAll(`mwc-select`);
-    this.optionModal = this.querySelector(`accordion-option-modal`);
-
-    // NOTE: Kiali Graph API Parameter
-    // duration, graphType, injectServiceNodes, groupBy, appenders, namespaces    
-    this.data = await fetch('/kiali/namespaces/graph?duration=21600s&graphType=app&injectServiceNodes=true&groupBy=app&appenders=deadNode,sidecarsCheck,serviceEntry,istio,unusedNode,securityPolicy&namespaces=book-info').then( res => res.json() );
-
-    this.initCytoscape();
+    this.optionModal = this.querySelector(`accordion-option-modal`);              
   }
 
-  protected updated(): void {
+  protected updated(changedProp: any): void {    
+    console.log(changedProp);
+    if (this.cy) {
+      this.tippys.forEach(tippy => {
+        tippy.destroy();
+      })
+    }
+    this.initCytoscape();
+
     this.setCustomStyleMwcSelect();
   }
 
@@ -98,9 +127,36 @@ export class AccordionGraph extends LitElement {
     return this;
   }
 
+  async initData(): Promise<void> {
+    const graphTypeElement: AccordionSelect = this.querySelector(`.graph-type-filter`);
+    const graphTypeValue = graphTypeElement.getValue();
+    const graphType = graphTypeValue === `App` 
+      ? `app`
+      : graphTypeValue === `Versioned App`
+      ? `versionedApp`
+      : graphTypeValue === `Service`
+      ? `service`
+      : graphTypeValue === `Workload`
+      ? `workload`
+      : `app`;
+    
+    // NOTE: Kiali Graph API Parameter
+    // duration, graphType, injectServiceNodes, groupBy, appenders, namespaces    
+    this.data = await fetch(this.kialiUrl 
+      + `?` + `duration=${this.duration}`
+      + `&` + `graphType=${graphType}`
+      + `&` + `injectServiceNodes=${this.injectServiceNodes}`
+      + `&` + `groupBy=${this.groupBy}`
+      + `&` + `appenders=${this.appenders.join(`,`)}`
+      + `&` + `namespaces=${this.namespaces}`
+    ).then( res => res.json() );
+  }
+
   async initCytoscape(): Promise<void> {    
-    const { elements } = this.data;
-    const { nodes } = elements;
+    await this.initData();
+    
+    const elements = this.data?.elements;
+    const nodes = elements?.nodes;
     console.log(this.data);
 
     this.addDataNodeType(nodes);
@@ -114,13 +170,8 @@ export class AccordionGraph extends LitElement {
       style: [      
         {
           "selector": "node",
-          "style": {
-            ["shape" as any]: "data(type)",
-          }
-        },
-        {
-          "selector": ":child",          
           "style": {            
+            ["shape" as any]: "data(type)",            
             'content': 'data(nodeType)',
             'text-valign': 'center',
             'color': 'white',
@@ -140,6 +191,7 @@ export class AccordionGraph extends LitElement {
         {
           "selector": ":parent",
           "style": {
+            'content': '',
             'background-color': 'rgba(255, 255, 255, 0.8)',
             'border-width': 1,
             'border-color': 'rgba(206, 205, 206, 0.5)',
@@ -171,11 +223,42 @@ export class AccordionGraph extends LitElement {
 
     this.cy.autolock(true);
 
-    this.addZoomEventListener();
+    // this.addZoomEventListener();
     this.addMouseEventListeners();
 
-    this.initTippy(elements.nodes);    
+    this.initNodeLabel();
+    // this.initTippy(elements.nodes);    
 
+    this.initTrafficRenderer();
+    
+  }
+
+  initNodeLabel(): void {
+    this.cy.nodeHtmlLabel([
+      {
+        query: `:parent`,
+        valign: `top`,
+        halign: `center`,
+        valignBox: `top`,
+        halignBox: `center`,
+        tpl: (data: any) => {
+          return `<span class="parent tippy-content">${data[data.nodeType]}</span>`;
+        }
+      },
+      {
+        query: `:child`,
+        valign: `bottom`,
+        halign: `center`,
+        valignBox: `bottom`,
+        halignBox: `center`,
+        tpl: (data: any) => {
+          return `<span class="child tippy-content">${data[data.nodeType]}</span>`;
+        }
+      },
+    ]);
+  }
+
+  initTrafficRenderer(): void {
     this.trafficRenderer = new TrafficRender(this.cy, this.cy.edges());
 
     this.trafficRenderer!.start();
@@ -187,7 +270,7 @@ export class AccordionGraph extends LitElement {
   }
 
   addDataNodeType(nodes: any): void {
-    nodes.forEach((node: any) => {
+    nodes?.forEach((node: any) => {
       switch (node.data.nodeType) {
         case `app`:
           node.data.type = `round-rectangle`;
@@ -208,7 +291,7 @@ export class AccordionGraph extends LitElement {
   }
 
   addDataOpacity(nodes: any): void {
-    nodes.forEach((node: any) => {
+    nodes?.forEach((node: any) => {
       if (node.data.isUnused) {
         node.data.opacity = 0.5;
         node.data.borderStyle = `dashed`;
@@ -217,77 +300,7 @@ export class AccordionGraph extends LitElement {
       node.data.opacity = 1;
       node.data.borderStyle = `solid`;
     });
-  }
-
-  initTippy(datas: NodesData[]): void {
-    console.log(datas);
-    datas.forEach((each, index) => {
-      const { data } = each;
-      const node = this.cy!.nodes().eq(index);   
-      if (!data.parent) {                     
-        const tippy = this.makeTippy(node, (data.app as string), `parent`);
-
-        tippy.show();
-        return;
-      }
-      const tippy = this.makeTippy(node, (data.app as string), `child`);
-      tippy.show();
-    });    
-  }
-
-  // Tippy.js v6+ is not compatible with Popper v1. so, Tippy you can use is v5.
-  makeTippy(node: cytoscape.NodeSingular, text: string, theme?: string ) {
-    const ref = node.popperRef();
-    const dummyDomEle = document.createElement('div');
-
-    const tip = tippy(dummyDomEle, {
-      onCreate: (instance) => {
-        instance.popperInstance.reference = ref;
-      },
-      lazy: false,
-      trigger: 'manual',
-
-      content: () => {
-        const div = document.createElement('div');
-
-        div.innerHTML = text;
-
-        return div;
-      },
-      plugins: [
-        sticky,
-      ],
-      arrow: true,
-      placement: theme === `parent` ? `top` : `bottom`,
-      hideOnClick: false,
-      multiple: false,
-      sticky: true,
-      interactive: false,
-      theme: theme,
-      boundary: this.querySelector(`.graph`) as HTMLElement,
-      appendTo: document.body,
-      popperOptions: {
-        modifiers: {
-          preventOverflow: {
-            boundariesElement: this.querySelector(`.graph`) as HTMLElement,
-          }
-        }
-      },
-      zIndex: 1,
-    });
-
-    return tip;
-  }
-
-  addZoomEventListener(): void {
-    this.cy.on('zoom', (event) => {
-      const zoom = event.cy.zoom();
-
-      document.querySelectorAll(`body > .tippy-popper:not([x-placement="right"]) .tippy-content`).forEach(tooltip => {
-        (tooltip as HTMLElement).style.transform = `scale(${zoom / 1.7})`;
-      });
-    });
-  }
+  }    
 
   addMouseEventListeners(): void {
     this.cy.on('mouseover', 'node,edge', (event) => {    
@@ -382,6 +395,25 @@ export class AccordionGraph extends LitElement {
     const predecessorsColor = selectedColor;
     const nodeColor = '#fff';
     const nodeActiveColor = selectedColor;
+    const showTraffic = (target: any): void => {
+      const protocol = target.data().traffic.protocol;
+      const rates = target.data().traffic.rates?.[protocol] ? `\n(${target.data().traffic.rates?.[protocol]})` : ``;
+      const percentage = target.data().traffic.rates?.[protocol] ? `\n(${target.data().traffic.rates?.[protocol + `PercentReq`]})` : ``;
+      const time = target.data()?.responseTime ? target.data()?.responseTime + `ms` : ``;
+
+      if (this.requestType === `No Edge Labels`) {
+        target.style(`label`, protocol);
+      } else if (this.requestType === `Requests per Seconds`) {
+        target.style(`label`, protocol + rates);
+      } else if (this.requestType === `Requests percentage`) {
+        target.style(`label`, protocol + percentage);
+      } else {
+        target.style(`label`, protocol + `\n` + time);
+      }
+
+      target.style(`opacity`, 1);      
+      target.removeClass(`mousedim`);
+    };
 
     target.style('background-color', nodeActiveColor);
     target.style('color', nodeColor);
@@ -396,13 +428,7 @@ export class AccordionGraph extends LitElement {
         target2.style('background-color', successorColor);
 
         target2.connectedEdges().each((target3: any) => {
-          const protocol = target3.data().traffic.protocol;
-          const rates = target3.data().traffic.rates?.[protocol] ? `\n(${target3.data().traffic.rates?.[protocol]})` : ``;
-          // TODO: add PercentReq, responses
-
-          target3.style(`opacity`, 1);
-          target3.style(`label`, protocol + rates);
-          target3.removeClass(`mousedim`);
+          showTraffic(target3);
         });
 
         target2.neighborhood().each((target3: any) => {
@@ -413,13 +439,7 @@ export class AccordionGraph extends LitElement {
     }
 
     if (target.isEdge()) {
-      const protocol = target.data().traffic.protocol;
-      const rates = target.data().traffic.rates?.[protocol] ? `\n(${target.data().traffic.rates?.[protocol]})` : ``;
-      // TODO: add PercentReq, responses
-
-      target.style(`opacity`, 1);
-      target.style(`label`, protocol + rates);
-      target.removeClass(`mousedim`);
+      showTraffic(target);
     }
 
     target.connectedNodes().each((event: any) => {
@@ -428,13 +448,7 @@ export class AccordionGraph extends LitElement {
     });
 
     target.connectedEdges().each((target2: any) => {
-      const protocol = target2.data().traffic.protocol;
-      const rates = target2.data().traffic.rates?.[protocol] ? `\n(${target2.data().traffic.rates?.[protocol]})` : ``;
-      // TODO: add PercentReq, responses
-
-      target2.style(`opacity`, 1);
-      target2.style(`label`, protocol + rates);
-      target2.removeClass(`mousedim`);
+      showTraffic(target2);
     });
 
     target.neighborhood().each((event: any) => {
@@ -468,9 +482,19 @@ export class AccordionGraph extends LitElement {
     return html`    
     <div class="graph-wrap ${this.styles()}">
       <div class="toolbar">
-        <accordion-select class="namespace-filter" title="namespace" .data="${this.namespaceList}"></accordion-select>        
+        <accordion-select 
+          class="namespace-filter" 
+          title="namespace" 
+          .data="${this.namespaceList}"
+          @change-event=${(event: CustomEvent) => this.namespaces = event.detail.selected}
+        ></accordion-select>        
 
-        <accordion-select class="namespace-filter" title="Graph Type" .data="${this.graphType}"></accordion-select>        
+        <accordion-select 
+          class="graph-type-filter" 
+          title="Graph Type" 
+          .data="${this.graphType}"
+          @change-event=${(event: CustomEvent) => this.selectGraphType = event.detail.selected}
+        ></accordion-select>        
 
         <!-- NOTE: Find / Hide Search Input -->
         <!-- <div class="find-or-hide">
@@ -493,7 +517,58 @@ export class AccordionGraph extends LitElement {
         
         </div>
       </div>
-      <accordion-option-modal></accordion-option-modal>
+      <accordion-option-modal>
+        <!-- NOTE: 1. Edge Label, selectBox -->
+        <accordion-select 
+          title="Traffic View"
+          .data="${[
+            `No Edge Labels`,
+            `Requests per Seconds`,
+            `Requests percentage`,
+            `Response Time`,
+          ]}"
+          @change-event=${(event: CustomEvent) => this.requestType = event.detail.selected}
+        ></accordion-select>
+        <!-- NOTE: 3. Last, selectBox -->
+        <accordion-select 
+          title="Last Request"
+          .data="${[
+            `Last 1m`,
+            `Last 5m`,
+            `Last 10m`,
+            `Last 30m`,
+            `Last 1h`,
+            `Last 3h`,
+            `Last 6h`,
+          ]}"
+        ></accordion-select>
+        <!-- NOTE: 4. Every, selectBox -->
+        <accordion-select 
+          title="Every Request"
+          .data="${[
+            `Pause`,
+            `Every 10s`,
+            `Every 15s`,
+            `Every 30s`,
+            `Every 1m`,
+            `Every 5m`,
+            `Every 15m`,
+          ]}"
+        ></accordion-select>
+        <div class="display-content content is-small">
+          <h1 class="option-display">Display</h1>
+          <accordion-multi-check-box 
+            title="Display Option - Multi Select"
+            .data="${[
+              `Compress Hidden`,
+              `Node Names`,
+              `Service Nodes`,
+              `Traffic Animation`,
+              `Unused Nodes`,
+            ]}"
+          ></accordion-multi-check-box>
+        </div>
+      </accordion-option-modal>
     </div>    
     `;
   }
@@ -627,19 +702,21 @@ export class AccordionGraph extends LitElement {
       opacity: 0;
     }
 
-    .parent-theme .tippy-content {
+    .parent.tippy-content {
       border-radius: 3px;
       box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.2), 0 2px 8px 0 rgba(0, 0, 0, 0.19);
       display: flex;
       background-color: #393f44;
       color: #fff;
-      font-size: 11px;
+      font-size: 10px;
       padding: 3px 5px;
       border-radius: 3px;
       border-width: 1px;
+      transform: scale(0.8);
+      user-select: none;
     }
     
-    .child-theme .tippy-content {
+    .child.tippy-content {
       align-items: center;
       background-color: #fff;
       color: #030303;
@@ -647,14 +724,31 @@ export class AccordionGraph extends LitElement {
       border-radius: 3px;
       border-width: 1px;
       display: flex;
-      font-size: 8px;
+      font-size: 10px;
       padding: 3px 5px;
+      transform: scale(0.8);
+      user-select: none;
     }    
 
     mwc-button {
       display: flex;
       align-items: center;
       justify-content: center;
+    }
+
+    .option-display {
+      font-size: 14px;
+      color: rgb(51, 51, 51);
+      margin-top: 10px;
+      margin-bottom: 10px;
+      height: 30px;
+      box-sizing: border-box;
+      border-bottom: 1px solid rgb(224, 224, 224);
+      font-weight: normal;
+    }
+    
+    accordion-multi-check-box {
+      --acc-width: 380px;
     }
   `;
   }

@@ -1,5 +1,7 @@
 import { html, TemplateResult, customElement, LitElement, PropertyDeclarations, CSSResult, css, eventOptions } from 'lit-element';
 import bulmaCss from 'bulma/css/bulma.css'; // required lit-scss-loader
+import './accordion-select';
+import './accordion-multi-check-box';
 
 @customElement('accordion-option-modal')
 export class AccordionOptionModal extends LitElement {
@@ -52,29 +54,13 @@ export class AccordionOptionModal extends LitElement {
             Option
           </header>
           <main>
-            <!-- NOTE: 1. Edge Label, selectBox -->
-            <accordion-select title="Request Type"></accordion-select>
-            <!-- TODO: 2. Display(9), checkboxs -->
-            <label class="checkbox">
-              <input type="checkbox">
-              Remember me
-            </label>
-
-            <label class="checkbox">
-              <input type="checkbox">
-              Remember me
-            </label>
-            <!-- NOTE: 3. Last, selectBox -->
-            <accordion-select title="Last Request"></accordion-select>
-            <!-- NOTE: 4. Every, selectBox -->
-            <accordion-select title="Every Request"></accordion-select>
+            <slot></slot>            
           </main>
           <footer>
             <button 
               class="cancel-button button is-small"
               @click=${this.hide}
-            >Cancel</button>
-            <button class="save-button button is-small">Save</button>
+            >OK</button>
           </footer>
         </div>
       </div>
@@ -83,7 +69,8 @@ export class AccordionOptionModal extends LitElement {
 
   static get styles(): CSSResult[] {
     return [
-      bulmaCss, css`
+      bulmaCss,
+      css`
     :host {
       position: absolute;
       width: 100%;
@@ -169,6 +156,15 @@ export class AccordionOptionModal extends LitElement {
     .save-button:focus {
       color: #fff;
     }
+
+    ::slotted(accordion-select),
+    ::slotted(accordion-multi-check-box) {
+      --acc-width: 380px;
+    }
+    
+    ::slotted(.display-content) {
+      padding: 0;
+    }    
     `];
   }
 }

@@ -10,6 +10,10 @@ declare module 'cytoscape' {
     popper?: any;
     popperRef?: any;
   }
+
+  export interface Core {
+    nodeHtmlLabel?: any;
+  }
 }
 
 declare const type: object;

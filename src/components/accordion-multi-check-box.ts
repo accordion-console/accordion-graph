@@ -2,20 +2,28 @@ import { html, TemplateResult, customElement, LitElement, PropertyDeclarations, 
 
 const IconCheckbox = html`<svg class="svg-inline--fa fa-check fa-w-16" width="20" height="20" aria-hidden="true" data-prefix="fas" data-icon="check" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" data-fa-i2svg=""><path fill="currentColor" d="M173.898 439.404l-166.4-166.4c-9.997-9.997-9.997-26.206 0-36.204l36.203-36.204c9.997-9.998 26.207-9.998 36.204 0L192 312.69 432.095 72.596c9.997-9.997 26.207-9.997 36.204 0l36.203 36.204c9.997 9.997 9.997 26.206 0 36.204l-294.4 294.401c-9.998 9.997-26.207 9.997-36.204-.001z"></path></svg>`;
 
-@customElement('accordion-select')
-export class AccordionSelect extends LitElement {
+const remove = (arr: any[], func: any) =>
+  Array.isArray(arr)
+    ? arr.filter(func).reduce((acc: any, val: any) => {
+      arr.splice(arr.indexOf(val), 1);
+      return acc.concat(val);
+    }, [])
+    : [];
+
+@customElement('accordion-multi-check-box')
+export class AccordionMultiCheckBox extends LitElement {
   static get properties(): PropertyDeclarations {
     return {
       title: { type: String, },
       data: { type: Array, },
-      selectedIndex: { type: Number, },
+      selectedIndex: { type: Array, },
       clicked: { type: Boolean, },
     };
   }
 
   title: string;
   data: string[];
-  selectedIndex: number;
+  selectedIndex: number[];
   clicked: boolean;
   width: string;
 
@@ -23,7 +31,7 @@ export class AccordionSelect extends LitElement {
     super();  
     this.title = `Title`;
     this.data = [`test1`,`test2`];
-    this.selectedIndex = 0;
+    this.selectedIndex = [];
     this.clicked = false;
   }
 
@@ -52,25 +60,13 @@ export class AccordionSelect extends LitElement {
   onClickItem(event: Event, index: number): void {
     event.stopImmediatePropagation();
 
-    this.selectedIndex = index;
-    this.clicked = false;
-  }
+    if (this.selectedIndex.includes(index)) {
+      remove(this.selectedIndex, (n: number) => n === index);
+    } else {
+      this.selectedIndex.push(index);
+    }   
 
-  getValue(): string {
-    return this.data[this.selectedIndex];
-  }
-
-  updated(changedProperties: any): void {
-    changedProperties.forEach((_oldValue: any, propName: string) => {
-      if (propName === `selectedIndex`) {
-        const event = new CustomEvent('change-event', {
-          detail: {
-            selected: this.data[this.selectedIndex],
-          }
-        });
-        this.dispatchEvent(event);
-      }
-    });
+    this.requestUpdate();
   }
 
   protected render(): TemplateResult {
@@ -79,16 +75,14 @@ export class AccordionSelect extends LitElement {
         class="custom-select"
         @click=${this.onClickSelect}
       >
-        <strong class="title">${this.title}</strong>
-
         <div class="select-selected ${this.clicked ? `clicked` : ``}">
-          ${this.data[this.selectedIndex]}
+          ${this.title}
+          <span class="data-count">${this.selectedIndex.length}/${this.data.length}</span>
           <div class="select-items ${this.clicked ? `` : `select-hide`}">
             ${this.data.map((text, index) => html`
               <div 
-                class="${this.selectedIndex === index ? `selected` : ``}" 
                 @click=${(event: Event) => this.onClickItem(event, index)}
-              >${text} ${this.selectedIndex === index ? IconCheckbox : null}</div>`)}
+              >${text} ${this.selectedIndex.includes(index) ? IconCheckbox : null}</div>`)}
           </div>
         </div>
       </button>
@@ -157,7 +151,6 @@ export class AccordionSelect extends LitElement {
       cursor: pointer;
       user-select: none;
       padding-right: 50px;
-      min-height: 34px;
 
       width: var(--acc-width, 180px);
       box-sizing: border-box;
@@ -197,9 +190,6 @@ export class AccordionSelect extends LitElement {
       left: auto;
       transform: translate3d(-17px, 10px, 0);
       width: var(--acc-width, 180px);
-
-      max-height: 300px;
-      overflow: scroll;
     }
     
     .select-hide {
@@ -215,6 +205,22 @@ export class AccordionSelect extends LitElement {
       height: 10px;
       float: right;
       color: #666a;
+    }
+
+    .data-count {
+      border-radius: 100%;
+      background-color: #ddda;
+      width: auto;
+      padding: 0 7px;
+      height: 20px;
+      text-align: center;
+      line-height: 160%;
+      font-size: 14px;
+      color: #333;
+      position: absolute;
+      right: 30px;
+      top: 50%;
+      transform: translateY(-50%);
     }
     `;
   }
