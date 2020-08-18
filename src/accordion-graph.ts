@@ -88,6 +88,7 @@ export class AccordionGraph extends LitElement {
 
   private cy?: cytoscape.Core;
   private data: any = {};
+  private healthData: any = {};
   private trafficRenderer?: TrafficRender;
   private intervalId: number;
 
@@ -137,15 +138,20 @@ export class AccordionGraph extends LitElement {
     
     // NOTE: Kiali Graph API Parameter
     // duration, graphType, injectServiceNodes, groupBy, appenders, namespaces    
-    const data = await fetch(this.kialiUrl 
-      + `?` + `duration=${this.duration}`
-      + `&` + `graphType=${graphType}`
-      + `&` + `injectServiceNodes=${this.injectServiceNodes}`
-      + `&` + `groupBy=${this.groupBy}`
-      + `&` + `appenders=${this.appenders.join(`,`)}`
-      + `&` + `namespaces=${this.namespaces}`
-    );
+    const [data, healthData] = await Promise.all([
+      fetch(this.kialiUrl 
+        + `?` + `duration=${this.duration}`
+        + `&` + `graphType=${graphType}`
+        + `&` + `injectServiceNodes=${this.injectServiceNodes}`
+        + `&` + `groupBy=${this.groupBy}`
+        + `&` + `appenders=${this.appenders.join(`,`)}`
+        + `&` + `namespaces=${this.namespaces}`
+      ),
+      fetch(`kiali/namespaces/${this.namespaces}/health?type=${graphType}&rateInterval=${this.duration}`),
+    ]);
+
     this.data = await data.json();
+    this.healthData = await healthData.json();
 
     const elements = this.data?.elements;
     const edges = elements?.edges;
@@ -159,7 +165,7 @@ export class AccordionGraph extends LitElement {
     await this.initData();
     
     const elements = this.data?.elements;    
-    console.log(this.data);    
+    console.log(this.data, this.healthData);
 
     this.cy = cytoscape({
       container: this?.querySelector(`.graph`),
@@ -223,6 +229,7 @@ export class AccordionGraph extends LitElement {
 
     this.cy.autolock(true);
     
+    this.hilightNode();
     this.hilightEdge();
 
     this.addMouseEventListeners();
@@ -238,10 +245,29 @@ export class AccordionGraph extends LitElement {
     }    
   }
 
+  hilightNode(): void {
+    this.cy.nodes().forEach(node => {
+      const warnColor = `rgb(241, 171, 33)`;
+      const errorColor = `rgb(201, 24, 12)`;
+      
+      if (node.isParent() && node.data().app) {
+        if (this.healthData[node.data().app]?.requests.errorRatio > 0.001) {
+          node.style(`border-color`, warnColor)
+        }
+        
+        if (this.healthData[node.data().app]?.requests?.errorRatio >= 0.2) {
+          node.style(`border-color`, errorColor);
+        }
+      }
+    });
+  }
+
   hilightEdge(): void {
     this.cy.edges().forEach(edge => {
       const successColor = `rgb(61, 134, 73)`;
       const tcpColor = `rgb(0, 67, 103)`;
+      const warnColor = `rgb(241, 171, 33)`;
+      const errorColor = `rgb(201, 24, 12)`;
       const protocol = edge.data()?.traffic?.protocol;
       const rates = edge.data()?.traffic?.rates?.[protocol] ? edge.data()?.traffic?.rates?.[protocol] : ``;
       const percentage = edge.data()?.traffic?.rates?.[protocol + `PercentReq`] ? edge.data()?.traffic?.rates?.[protocol + `PercentReq`] : ``;
@@ -252,6 +278,18 @@ export class AccordionGraph extends LitElement {
           _edge.style(`target-arrow-color`, tcpColor);  
           return;
         }
+
+        if (_edge.data()?.traffic?.rates?.httpPercentErr) {
+          if (_edge.data()?.traffic?.rates?.httpPercentErr < 20) {
+            _edge.style(`line-color`, warnColor);
+            _edge.style(`target-arrow-color`, warnColor);
+            return;
+          }
+          _edge.style(`line-color`, errorColor);
+          _edge.style(`target-arrow-color`, errorColor);          
+          return;
+        }
+
         _edge.style(`line-color`, successColor);
         _edge.style(`target-arrow-color`, successColor);
       };
@@ -352,6 +390,10 @@ export class AccordionGraph extends LitElement {
       node.data.label = percentage;
     } else {
       node.data.label = time;
+    }
+
+    if (node.data.traffic?.rates?.httpPercentErr) {
+      node.data.label += `\n ${node.data.traffic?.rates?.httpPercentErr}%`;
     }
   }
 
@@ -491,6 +533,10 @@ export class AccordionGraph extends LitElement {
       target.style(`label`, protocol + `\n` + time);
     }
 
+    if (target.data()?.traffic?.rates?.httpPercentErr) {
+      target.style(`label`, target.style(`label`) + `\n ${target.data()?.traffic?.rates?.httpPercentErr}%`)
+    }
+
     target.style(`opacity`, 1);      
     target.removeClass(`mousedim`);
   }
@@ -626,6 +672,7 @@ export class AccordionGraph extends LitElement {
     await this.initData();
     this.reset();
     this.hilightEdge();
+    this.hilightNode();
   }
 
   onClickReload(): void {
