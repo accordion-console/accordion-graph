@@ -5,7 +5,7 @@ import cytoscape from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 import popper from 'cytoscape-popper';
 import cyCanvas from 'cytoscape-canvas';
-import tippy, { sticky, Instance, } from 'tippy.js';
+import tippy, { sticky, } from 'tippy.js';
 import TrafficRender from './components/traffic-renderer';
 import './components/context-menu';
 import { AccordionGraphContextMenu } from './components/context-menu';
@@ -13,7 +13,8 @@ import './components/accordion-select';
 import './components/option-modal';
 import { AccordionOptionModal } from './components/option-modal';
 import { AccordionSelect } from './components/accordion-select';
-import nodeHtmlLabel from 'cy-node-html-label';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const nodeHtmlLabel = require('cy-node-html-label');
 
 cytoscape.use(dagre);
 cytoscape.use(popper);
@@ -66,15 +67,16 @@ export class AccordionGraph extends LitElement {
       appenders: { type: Array, },
       namespaces: { type: String, },
       requestType: { type: String, },
+      intervalTime: { type: Number, },
     }
   }
 
-  duration = `21600s`;
+  duration = `60s`;
   selectGraphType = `workload`;
   injectServiceNodes = true;
   groupBy = `app`;
-  appenders = [`deadNode`,`sidecarsCheck`,`serviceEntry`,`istio`,`unusedNode`,`securityPolicy`, `responseTime`];
-  namespaces = `book-info`;
+  appenders = [`deadNode`,`sidecarsCheck`,`serviceEntry`,`istio`, `unusedNode`,`securityPolicy`, `responseTime`];
+  namespaces = ``;
   kialiUrl = `/kiali/namespaces/graph`;    
   hideInfoBox = false;
   namespaceList = [`istio-system`, `namespace 2`];
@@ -82,11 +84,12 @@ export class AccordionGraph extends LitElement {
   graphType = [`App`, `Versioned App`, `Service`, `Workload`];
   selectedGraphTypeIndex = 0;
   requestType: `No Edge Labels` | `Requests per Seconds` | `Requests percentage` | `Response Time`;
+  intervalTime: number | null = 10000;
 
   private cy?: cytoscape.Core;
   private data: any = {};
   private trafficRenderer?: TrafficRender;
-  private tippys: Instance[] = [];
+  private intervalId: number;
 
   selectBoxs!: NodeListOf<Element>|null;
   optionModal!: AccordionOptionModal|null;
@@ -97,25 +100,17 @@ export class AccordionGraph extends LitElement {
     this.data = undefined;
     this.selectBoxs = undefined;
     this.optionModal = undefined;
-    this.tippys.forEach(tippy => {
-      tippy.destroy();
-    });
-    this.tippys = undefined;
+    clearInterval(this.intervalTime);
     super.disconnectedCallback();
   }
 
   protected async firstUpdated(): Promise<void> {
+    this.namespaces = `book-info`;
     this.selectBoxs = this.querySelectorAll(`mwc-select`);
     this.optionModal = this.querySelector(`accordion-option-modal`);              
   }
 
-  protected updated(changedProp: any): void {    
-    console.log(changedProp);
-    if (this.cy) {
-      this.tippys.forEach(tippy => {
-        tippy.destroy();
-      })
-    }
+  protected updated(): void {
     this.initCytoscape();
 
     this.setCustomStyleMwcSelect();
@@ -138,29 +133,33 @@ export class AccordionGraph extends LitElement {
       ? `service`
       : graphTypeValue === `Workload`
       ? `workload`
-      : `app`;
+      : `app`;    
     
     // NOTE: Kiali Graph API Parameter
     // duration, graphType, injectServiceNodes, groupBy, appenders, namespaces    
-    this.data = await fetch(this.kialiUrl 
+    const data = await fetch(this.kialiUrl 
       + `?` + `duration=${this.duration}`
       + `&` + `graphType=${graphType}`
       + `&` + `injectServiceNodes=${this.injectServiceNodes}`
       + `&` + `groupBy=${this.groupBy}`
       + `&` + `appenders=${this.appenders.join(`,`)}`
       + `&` + `namespaces=${this.namespaces}`
-    ).then( res => res.json() );
+    );
+    this.data = await data.json();
+
+    const elements = this.data?.elements;
+    const edges = elements?.edges;
+    const nodes = elements?.nodes;    
+
+    this.addEdgeData(edges);
+    this.addNodeData(nodes);
   }
 
   async initCytoscape(): Promise<void> {    
     await this.initData();
     
-    const elements = this.data?.elements;
-    const nodes = elements?.nodes;
-    console.log(this.data);
-
-    this.addDataNodeType(nodes);
-    this.addDataOpacity(nodes);
+    const elements = this.data?.elements;    
+    console.log(this.data);    
 
     this.cy = cytoscape({
       container: this?.querySelector(`.graph`),
@@ -200,7 +199,7 @@ export class AccordionGraph extends LitElement {
         {
           "selector": "edge",
           "style": {
-            'curve-style': 'straight',
+            'curve-style': 'bezier',
             'target-arrow-shape': 'triangle-backcurve',
             "arrow-scale": 0.5,
             'width': 1,
@@ -210,9 +209,10 @@ export class AccordionGraph extends LitElement {
             'text-transform': 'uppercase',
             'text-outline-color': '#666',
             'text-wrap': 'wrap',
+            'label': 'data(label)'
           },
         },
-      ],    
+      ],
       layout: {
         name: 'dagre',
         fit: true,
@@ -222,19 +222,85 @@ export class AccordionGraph extends LitElement {
     });  
 
     this.cy.autolock(true);
+    
+    this.hilightEdge();
 
-    // this.addZoomEventListener();
     this.addMouseEventListeners();
 
     this.initNodeLabel();
-    // this.initTippy(elements.nodes);    
 
     this.initTrafficRenderer();
-    
+
+    window.clearInterval(this?.intervalId);
+
+    if (this.intervalTime) {
+      this.intervalId = window.setInterval(() => this.reload(), this.intervalTime); 
+    }    
+  }
+
+  hilightEdge(): void {
+    this.cy.edges().forEach(edge => {
+      const successColor = `rgb(61, 134, 73)`;
+      const tcpColor = `rgb(0, 67, 103)`;
+      const protocol = edge.data()?.traffic?.protocol;
+      const rates = edge.data()?.traffic?.rates?.[protocol] ? edge.data()?.traffic?.rates?.[protocol] : ``;
+      const percentage = edge.data()?.traffic?.rates?.[protocol + `PercentReq`] ? edge.data()?.traffic?.rates?.[protocol + `PercentReq`] : ``;
+      const time = edge.data()?.responseTime ? edge.data()?.responseTime + `ms` : ``;
+      const hilightProtocol = (_edge: cytoscape.EdgeSingular | cytoscape.SingularElementReturnValue): void => {
+        if (_edge.data()?.traffic?.protocol === `tcp`) {
+          _edge.style(`line-color`, tcpColor);
+          _edge.style(`target-arrow-color`, tcpColor);  
+          return;
+        }
+        _edge.style(`line-color`, successColor);
+        _edge.style(`target-arrow-color`, successColor);
+      };
+      
+      if ( (this.requestType === `Requests percentage` && percentage)
+      || (this.requestType === `Requests per Seconds` && rates )
+      || (this.requestType === `Response Time` && time)
+      || (this.requestType === `No Edge Labels` && rates) ) {
+        edge.connectedNodes().predecessors().each(each => {
+          if (each.isEdge()) {
+            hilightProtocol(each);
+          }
+        });        
+        hilightProtocol(edge);
+      }
+    });
+  }
+
+  reset() {
+    this.cy?.autolock(false);    
+    this.cy?.edges().each(edge => {
+      edge.style(`line-color`, `rgb(156, 156, 156)`);
+      edge.style(`target-arrow-color`, `rgb(156, 156, 156)`);
+      delete edge.data().responseTime;
+    });
+    this.cy?.json({ elements: this.data.elements });
+    this.cy?.layout({
+      name: 'dagre',
+      fit: false,
+      nodeDimensionsIncludeLabels: true,
+      rankDir: 'LR',
+    }).run();
+
+    this.cy?.autolock(true);
+    this.trafficRenderer.setEdges(this.cy.edges());
   }
 
   initNodeLabel(): void {
-    this.cy.nodeHtmlLabel([
+    this.cy.nodeHtmlLabel([      
+      {
+        query: `node`,
+        valign: `bottom`,
+        halign: `center`,
+        valignBox: `bottom`,
+        halignBox: `center`,
+        tpl: (data: any) => {
+          return `<span class="child tippy-content">${data[data.nodeType] || data[`service`]}</span>`;
+        }
+      },
       {
         query: `:parent`,
         valign: `top`,
@@ -243,16 +309,6 @@ export class AccordionGraph extends LitElement {
         halignBox: `center`,
         tpl: (data: any) => {
           return `<span class="parent tippy-content">${data[data.nodeType]}</span>`;
-        }
-      },
-      {
-        query: `:child`,
-        valign: `bottom`,
-        halign: `center`,
-        valignBox: `bottom`,
-        halignBox: `center`,
-        tpl: (data: any) => {
-          return `<span class="child tippy-content">${data[data.nodeType]}</span>`;
         }
       },
     ]);
@@ -269,37 +325,67 @@ export class AccordionGraph extends LitElement {
     });
   }
 
-  addDataNodeType(nodes: any): void {
-    nodes?.forEach((node: any) => {
-      switch (node.data.nodeType) {
-        case `app`:
-          node.data.type = `round-rectangle`;
-          break;        
-        case `service`:
-          node.data.type = `round-triangle`;
-          break;
-        case `workload`:
-          node.data.type = `ellipse`;
-          break;
-        case `unknown`:
-          node.data.type = `round-diamond`;
-          break;
-        default:
-          node.data.type = `round-tag`;
-      }      
+  addEdgeData(edges: any): void {
+    edges?.forEach((edge: any) => {      
+      this.addLabel(edge);       
     });
   }
 
-  addDataOpacity(nodes: any): void {
-    nodes?.forEach((node: any) => {
-      if (node.data.isUnused) {
-        node.data.opacity = 0.5;
-        node.data.borderStyle = `dashed`;
-        return;
-      }
-      node.data.opacity = 1;
-      node.data.borderStyle = `solid`;
+  addNodeData(nodes: any): void {
+    nodes?.forEach((node: any) => {      
+      this.addNodeType(node);       
+      this.addOpacity(node);
     });
+  }
+
+  addLabel(node: any): void {
+    const protocol = node.data?.traffic?.protocol;
+    const rates = node.data?.traffic?.rates?.[protocol] ? node.data?.traffic?.rates?.[protocol] : ``;
+    const percentage = node.data?.traffic?.rates?.[protocol] ? node.data?.traffic?.rates?.[protocol + `PercentReq`] : ``;
+    const time = node.data?.responseTime ? node.data?.responseTime + `ms` : ``;    
+
+    if (this.requestType === `No Edge Labels`) {
+      node.data.label = ``;
+    } else if (this.requestType === `Requests per Seconds`) {
+      node.data.label = rates;
+    } else if (this.requestType === `Requests percentage`) {
+      node.data.label = percentage;
+    } else {
+      node.data.label = time;
+    }
+  }
+
+  addNodeType(node: any): void {
+    switch (node.data.nodeType) {
+      case `app`:
+        node.data.type = `round-rectangle`;
+        break;        
+      case `service`:
+        node.data.type = `round-triangle`;
+        if (node.data?.isServiceEntry) {
+          node.data.nodeType = `service entry`;
+          node.data.type = `round-tag`;
+        }
+        break;
+      case `workload`:
+        node.data.type = `ellipse`;
+        break;
+      case `unknown`:
+        node.data.type = `round-diamond`;
+        break;
+      default:
+        node.data.type = `round-tag`;
+    }
+  }  
+
+  addOpacity(node: any): void {
+    if (node.data.isUnused) {
+      node.data.opacity = 0.5;
+      node.data.borderStyle = `dashed`;
+      return;
+    }
+    node.data.opacity = 1;
+    node.data.borderStyle = `solid`;
   }    
 
   addMouseEventListeners(): void {
@@ -386,7 +472,27 @@ export class AccordionGraph extends LitElement {
     cy.edges().forEach((target) => {
       target.addClass(`mousedim`);
       this.setOpacityElement(target, 0.5);
-  });
+    });
+  }
+
+  showTraffic(target: any): void {
+    const protocol = target.data().traffic.protocol;
+    const rates = target.data().traffic.rates?.[protocol] ? `\n(${target.data().traffic.rates?.[protocol]})` : ``;
+    const percentage = target.data().traffic.rates?.[protocol + `PercentReq`] ? `\n(${target.data().traffic.rates?.[protocol + `PercentReq`]})` : ``;
+    const time = target.data()?.responseTime ? target.data()?.responseTime + `ms` : ``;
+    
+    if (this.requestType === `No Edge Labels`) {
+      target.style(`label`, protocol);
+    } else if (this.requestType === `Requests per Seconds`) {
+      target.style(`label`, protocol + rates);
+    } else if (this.requestType === `Requests percentage`) {
+      target.style(`label`, protocol + percentage);
+    } else {
+      target.style(`label`, protocol + `\n` + time);
+    }
+
+    target.style(`opacity`, 1);      
+    target.removeClass(`mousedim`);
   }
 
   setFocus(target: any) {
@@ -395,25 +501,6 @@ export class AccordionGraph extends LitElement {
     const predecessorsColor = selectedColor;
     const nodeColor = '#fff';
     const nodeActiveColor = selectedColor;
-    const showTraffic = (target: any): void => {
-      const protocol = target.data().traffic.protocol;
-      const rates = target.data().traffic.rates?.[protocol] ? `\n(${target.data().traffic.rates?.[protocol]})` : ``;
-      const percentage = target.data().traffic.rates?.[protocol] ? `\n(${target.data().traffic.rates?.[protocol + `PercentReq`]})` : ``;
-      const time = target.data()?.responseTime ? target.data()?.responseTime + `ms` : ``;
-
-      if (this.requestType === `No Edge Labels`) {
-        target.style(`label`, protocol);
-      } else if (this.requestType === `Requests per Seconds`) {
-        target.style(`label`, protocol + rates);
-      } else if (this.requestType === `Requests percentage`) {
-        target.style(`label`, protocol + percentage);
-      } else {
-        target.style(`label`, protocol + `\n` + time);
-      }
-
-      target.style(`opacity`, 1);      
-      target.removeClass(`mousedim`);
-    };
 
     target.style('background-color', nodeActiveColor);
     target.style('color', nodeColor);
@@ -428,7 +515,7 @@ export class AccordionGraph extends LitElement {
         target2.style('background-color', successorColor);
 
         target2.connectedEdges().each((target3: any) => {
-          showTraffic(target3);
+          this.showTraffic(target3);
         });
 
         target2.neighborhood().each((target3: any) => {
@@ -439,7 +526,7 @@ export class AccordionGraph extends LitElement {
     }
 
     if (target.isEdge()) {
-      showTraffic(target);
+      this.showTraffic(target);
     }
 
     target.connectedNodes().each((event: any) => {
@@ -448,7 +535,7 @@ export class AccordionGraph extends LitElement {
     });
 
     target.connectedEdges().each((target2: any) => {
-      showTraffic(target2);
+      this.showTraffic(target2);
     });
 
     target.neighborhood().each((event: any) => {
@@ -478,6 +565,74 @@ export class AccordionGraph extends LitElement {
     });
   }
 
+  changeIntervalTime(event: CustomEvent): void {
+    switch(event.detail.selected) {
+      case `Pause`:
+        this.intervalTime = null;
+        break;
+      case `Every 10s`:
+        this.intervalTime = 10 * 1000;
+        break;
+      case `Every 15s`:
+        this.intervalTime = 15 * 1000;
+        break;
+      case `Every 1m`:
+        this.intervalTime = 60 * 1000;
+        break;
+      case `Every 5m`:
+        this.intervalTime = 5 * 60 * 1000;
+        break;
+      case `Every 15m`:      
+        this.intervalTime = 15 * 60 * 1000;
+        break;
+      default:
+        this.intervalTime = null;
+    }    
+  }
+
+  onChangeNamespace(event: CustomEvent): void {
+    if (!event.detail.selected) {
+      return;
+    }
+    this.namespaces = event.detail.selected;
+  }
+
+  onChangeLastRequest(event: CustomEvent): void {
+    switch(event.detail.selected) {
+      case `Last 1m`:
+        this.duration = 1 * 60 + `s`;
+        break;
+      case `Last 5m`:
+        this.duration = 5 * 60 + `s`;
+        break;
+      case `Last 10m`:
+        this.duration = 10 * 60 + `s`;
+        break;
+      case `Last 30m`:
+        this.duration = 30 * 60 + `s`;
+        break;
+      case `Last 1h`:
+        this.duration = 60 * 60 + `s`;
+        break;
+      case `Last 3h`:
+        this.duration = 3 * 60 * 60 + `s`;
+        break;
+      default:
+        this.duration = 6 * 60 * 60 + `s`;
+    }
+  }
+
+  async reload(): Promise<void> {
+    await this.initData();
+    this.reset();
+    this.hilightEdge();
+  }
+
+  onClickReload(): void {
+    this.reload();
+    this.cy.fit();
+  }
+
   render() {
     return html`    
     <div class="graph-wrap ${this.styles()}">
@@ -486,7 +641,8 @@ export class AccordionGraph extends LitElement {
           class="namespace-filter" 
           title="namespace" 
           .data="${this.namespaceList}"
-          @change-event=${(event: CustomEvent) => this.namespaces = event.detail.selected}
+          selectedIndex="5"
+          @change-event=${this.onChangeNamespace}
         ></accordion-select>        
 
         <accordion-select 
@@ -507,7 +663,10 @@ export class AccordionGraph extends LitElement {
           @click=${() => this.optionModal.show = !this.optionModal.show || true}
         >${IconOption}</button>
 
-        <button class="refresh-button">${IconRefresh}</button>
+        <button 
+          class="refresh-button"
+          @click=${this.onClickReload}
+        >${IconRefresh}</button>
       </div>
       <div class="graph-or-info">
         <div class="graph">
@@ -527,6 +686,7 @@ export class AccordionGraph extends LitElement {
             `Requests percentage`,
             `Response Time`,
           ]}"
+          selectedIndex="1"
           @change-event=${(event: CustomEvent) => this.requestType = event.detail.selected}
         ></accordion-select>
         <!-- NOTE: 3. Last, selectBox -->
@@ -541,10 +701,11 @@ export class AccordionGraph extends LitElement {
             `Last 3h`,
             `Last 6h`,
           ]}"
+          @change-event=${this.onChangeLastRequest}
         ></accordion-select>
         <!-- NOTE: 4. Every, selectBox -->
         <accordion-select 
-          title="Every Request"
+          title="Interval Time"
           .data="${[
             `Pause`,
             `Every 10s`,
@@ -553,9 +714,12 @@ export class AccordionGraph extends LitElement {
             `Every 1m`,
             `Every 5m`,
             `Every 15m`,
-          ]}"
+          ]}"          
+          selectedIndex="1"
+          @change-event=${this.changeIntervalTime}
         ></accordion-select>
-        <div class="display-content content is-small">
+
+        <!-- <div class="display-content content is-small">
           <h1 class="option-display">Display</h1>
           <accordion-multi-check-box 
             title="Display Option - Multi Select"
@@ -567,7 +731,7 @@ export class AccordionGraph extends LitElement {
               `Unused Nodes`,
             ]}"
           ></accordion-multi-check-box>
-        </div>
+        </div> -->
       </accordion-option-modal>
     </div>    
     `;

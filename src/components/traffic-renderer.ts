@@ -85,18 +85,6 @@ const getTrafficPointRendererForRpsError: (edge: any) => TrafficPointRenderer = 
  * @returns {TrafficPointRenderer}
  */
 const getTrafficPointRendererForRpsSuccess: (edge: any) => TrafficPointRenderer = (edge: any) => {
-  const successColor = `rgb(61, 134, 73)`;
-  const protocol = edge.data().traffic.protocol;
-  const rates = edge.data().traffic.rates?.[protocol] ? `${edge.data().traffic.rates?.[protocol]}` : ``;
-
-  if (!edge.hasClass(`mousedim`)) {
-    edge.style(`line-color`, successColor);
-    edge.style(`source-arrow-color`, successColor);
-
-    if (!edge.style(`label`)) {
-      edge.style(`label`, rates);
-    }
-  }  
   return new TrafficPointCircleRenderer(2, PfColors.White, edge.style('line-color'), 2);
 };
 
@@ -150,7 +138,7 @@ class TrafficPointGenerator {
   processStep(step: number, edge: any): TrafficPoint | undefined {
     if (this.timerForNextPoint !== undefined) {
       this.timerForNextPoint -= step;
-      // Add some random-ness to make it less "flat"
+      // Add some random-ness to make it less "flat"      
       if (this.timerForNextPoint <= Math.random() * 200) {
         this.timerForNextPoint = this.timer;
         return this.nextPoint(edge);
@@ -183,6 +171,7 @@ class TrafficPointGenerator {
     let renderer;
     let offset;
     const isErrorPoint = Math.random() <= this.errorRate;
+
     if (this.type === TrafficEdgeType.RPS) {
       renderer = isErrorPoint ? getTrafficPointRendererForRpsError(edge) : getTrafficPointRendererForRpsSuccess(edge);
     } else if (this.type === TrafficEdgeType.TCP) {
@@ -493,7 +482,7 @@ export default class TrafficRenderer {
     } else if (trafficEdge.getType() === TrafficEdgeType.TCP) {
       trafficEdge.setSpeed(TCP_SETTINGS.baseSpeed * edgeLengthFactor);
       trafficEdge.setErrorRate(TCP_SETTINGS.errorRate);
-      trafficEdge.setTimer(this.timerFromTcpSentRate(edgeData.tcp)); // 150 - 500
+      trafficEdge.setTimer(this.timerFromTcpSentRate(edgeData?.traffic?.rates?.tcp)); // 150 - 500
       trafficEdge.setEdge(edge);
     }
   }

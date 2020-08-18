@@ -103,7 +103,7 @@ export class AccordionOptionModal extends LitElement {
       display: flex;
 
       width: 400px;
-      height: 400px;
+      height: 300px;
       background-color: #fff;
 
       max-width: 80vw;
