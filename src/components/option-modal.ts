@@ -21,11 +21,7 @@ export class AccordionOptionModal extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
-  }
-
-  protected firstUpdated(): void {    
-    
-  }  
+  } 
 
   @eventOptions({ capture: false })
   onClickBackground(event: Event): void {

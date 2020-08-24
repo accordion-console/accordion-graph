@@ -13,6 +13,9 @@ import './components/accordion-select';
 import './components/option-modal';
 import { AccordionOptionModal } from './components/option-modal';
 import { AccordionSelect } from './components/accordion-select';
+import './components/graph-info';
+import { getAccumulatedTrafficRateHttp, getAccumulatedTrafficRateGrpc, } from './components/traffic-rate';
+import { AccordionGraphInfo } from './components/graph-info';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const nodeHtmlLabel = require('cy-node-html-label');
 
@@ -68,6 +71,12 @@ export class AccordionGraph extends LitElement {
       namespaces: { type: String, },
       requestType: { type: String, },
       intervalTime: { type: Number, },
+
+      appCount: { type: Number, },
+      versionedAppCount: { type: Number, },
+      serviceCount: { type: Number, },
+      edgeCount: { type: Number, },
+      workloadCount: { type: Number, },
     }
   }
 
@@ -77,7 +86,7 @@ export class AccordionGraph extends LitElement {
   groupBy = `app`;
   appenders = [`deadNode`,`sidecarsCheck`,`serviceEntry`,`istio`, `unusedNode`,`securityPolicy`, `responseTime`];
   namespaces = ``;
-  kialiUrl = `/kiali/namespaces/graph`;    
+  kialiUrl = `/kiali/namespaces`;    
   hideInfoBox = false;
   namespaceList = [`istio-system`, `namespace 2`];
   selectedNamespaceIndex = 0;
@@ -86,12 +95,29 @@ export class AccordionGraph extends LitElement {
   requestType: `No Edge Labels` | `Requests per Seconds` | `Requests percentage` | `Response Time`;
   intervalTime: number | null = 10000;
 
+  appCount = 0;
+  versionedAppCount = 0;
+  serviceCount = 0;
+  edgeCount = 0;
+  workloadCount = 0;
+
+  incomingRateGrpc: any = null;
+  incomingRateHttp: any = null;
+  outgoingRateGrpc: any = null;
+  outgoingRateHttp: any = null;
+  totalRateHttp: any = null;
+  totalRateGrpc: any = null;
+  rps: number[] = [];
+  errorRps: number[] = [];
+
   private cy?: cytoscape.Core;
   private data: any = {};
   private healthData: any = {};
+  private metricsData: any = {};
   private trafficRenderer?: TrafficRender;
   private intervalId: number;
 
+  graphInfo!: AccordionGraphInfo|null;
   selectBoxs!: NodeListOf<Element>|null;
   optionModal!: AccordionOptionModal|null;
 
@@ -101,12 +127,13 @@ export class AccordionGraph extends LitElement {
     this.data = undefined;
     this.selectBoxs = undefined;
     this.optionModal = undefined;
-    clearInterval(this.intervalTime);
+    clearInterval(this.intervalId);
     super.disconnectedCallback();
   }
 
   protected async firstUpdated(): Promise<void> {
     this.namespaces = `book-info`;
+    this.graphInfo = this.querySelector(`accordion-graph-info`);
     this.selectBoxs = this.querySelectorAll(`mwc-select`);
     this.optionModal = this.querySelector(`accordion-option-modal`);              
   }
@@ -114,7 +141,7 @@ export class AccordionGraph extends LitElement {
   protected updated(): void {
     this.initCytoscape();
 
-    this.setCustomStyleMwcSelect();
+    this.setCustomStyleMwcSelect();    
   }
 
   // ISSUE: https://github.com/cytoscape/cytoscape.js/issues/2081
@@ -139,7 +166,7 @@ export class AccordionGraph extends LitElement {
     // NOTE: Kiali Graph API Parameter
     // duration, graphType, injectServiceNodes, groupBy, appenders, namespaces    
     const [data, healthData] = await Promise.all([
-      fetch(this.kialiUrl 
+      fetch(this.kialiUrl + `/graph`
         + `?` + `duration=${this.duration}`
         + `&` + `graphType=${graphType}`
         + `&` + `injectServiceNodes=${this.injectServiceNodes}`
@@ -147,11 +174,15 @@ export class AccordionGraph extends LitElement {
         + `&` + `appenders=${this.appenders.join(`,`)}`
         + `&` + `namespaces=${this.namespaces}`
       ),
-      fetch(`kiali/namespaces/${this.namespaces}/health?type=${graphType}&rateInterval=${this.duration}`),
-    ]);
+      fetch(`${this.kialiUrl}/${this.namespaces}/health?type=${graphType}&rateInterval=${this.duration}`),      
+    ]);    
 
     this.data = await data.json();
     this.healthData = await healthData.json();
+
+    const metricsData = await fetch(`${this.kialiUrl}/${this.namespaces}/metrics?filters[]=request_count&filters[]=request_error_count&queryTime=${this.data.timestamp}&duration=${parseInt(this.duration)}&step=30&rateInterval=30s&direction=inbound&reporter=destination`);
+
+    this.metricsData = await metricsData.json();
 
     const elements = this.data?.elements;
     const edges = elements?.edges;
@@ -225,7 +256,7 @@ export class AccordionGraph extends LitElement {
         nodeDimensionsIncludeLabels: true,
         rankDir: 'LR'
       }    
-    });  
+    });
 
     this.cy.autolock(true);
     
@@ -236,7 +267,9 @@ export class AccordionGraph extends LitElement {
 
     this.initNodeLabel();
 
-    this.initTrafficRenderer();
+    this.initTrafficRenderer();    
+
+    this.initGraphInfo();
 
     window.clearInterval(this?.intervalId);
 
@@ -246,13 +279,29 @@ export class AccordionGraph extends LitElement {
   }
 
   hilightNode(): void {
-    this.cy.nodes().forEach(node => {
+    let appCount = 0;
+    let serviceCount = 0;
+    let workloadCount = 0;
+
+    this.cy.nodes().forEach(node => {      
       const warnColor = `rgb(241, 171, 33)`;
-      const errorColor = `rgb(201, 24, 12)`;
-      
-      if (node.isParent() && node.data().app) {
+      const errorColor = `rgb(201, 24, 12)`;            
+
+      if (node.isParent()) {
+        appCount += 1;
+      }
+
+      if (node.data().nodeType.includes(`service`)) {
+        serviceCount += 1;
+      }
+
+      if (node.data().nodeType.includes(`workload`)) {
+        workloadCount += 1;
+      }
+
+      if (node.data().app && node.data().isUnused !== true) {        
         if (this.healthData[node.data().app]?.requests.errorRatio > 0.001) {
-          node.style(`border-color`, warnColor)
+          node.style(`border-color`, warnColor);
         }
         
         if (this.healthData[node.data().app]?.requests?.errorRatio >= 0.2) {
@@ -260,9 +309,14 @@ export class AccordionGraph extends LitElement {
         }
       }
     });
+    this.appCount = appCount;
+    this.serviceCount = serviceCount;
+    this.workloadCount = workloadCount;
   }
 
   hilightEdge(): void {
+    let edgeCount = 0;
+
     this.cy.edges().forEach(edge => {
       const successColor = `rgb(61, 134, 73)`;
       const tcpColor = `rgb(0, 67, 103)`;
@@ -270,8 +324,9 @@ export class AccordionGraph extends LitElement {
       const errorColor = `rgb(201, 24, 12)`;
       const protocol = edge.data()?.traffic?.protocol;
       const rates = edge.data()?.traffic?.rates?.[protocol] ? edge.data()?.traffic?.rates?.[protocol] : ``;
-      const percentage = edge.data()?.traffic?.rates?.[protocol + `PercentReq`] ? edge.data()?.traffic?.rates?.[protocol + `PercentReq`] : ``;
+      const percentage = edge.data()?.traffic?.rates?.[protocol + `PercentReq`] ? edge.data()?.traffic?.rates?.[protocol + `PercentReq`] + `%` : ``;
       const time = edge.data()?.responseTime ? edge.data()?.responseTime + `ms` : ``;
+      edgeCount += 1;
       const hilightProtocol = (_edge: cytoscape.EdgeSingular | cytoscape.SingularElementReturnValue): void => {
         if (_edge.data()?.traffic?.protocol === `tcp`) {
           _edge.style(`line-color`, tcpColor);
@@ -294,10 +349,10 @@ export class AccordionGraph extends LitElement {
         _edge.style(`target-arrow-color`, successColor);
       };
       
-      if ( (this.requestType === `Requests percentage` && percentage)
-      || (this.requestType === `Requests per Seconds` && rates )
-      || (this.requestType === `Response Time` && time)
-      || (this.requestType === `No Edge Labels` && rates) ) {
+      if ( (this.requestType === `Requests percentage` && parseInt(percentage))
+      || (this.requestType === `Requests per Seconds` && parseInt(rates))
+      || (this.requestType === `Response Time` && parseInt(time))
+      || (this.requestType === `No Edge Labels` && parseInt(rates)) ) {
         edge.connectedNodes().predecessors().each(each => {
           if (each.isEdge()) {
             hilightProtocol(each);
@@ -306,6 +361,7 @@ export class AccordionGraph extends LitElement {
         hilightProtocol(edge);
       }
     });
+    this.edgeCount = edgeCount;
   }
 
   reset() {
@@ -387,7 +443,7 @@ export class AccordionGraph extends LitElement {
     } else if (this.requestType === `Requests per Seconds`) {
       node.data.label = rates;
     } else if (this.requestType === `Requests percentage`) {
-      node.data.label = percentage;
+      node.data.label = percentage + `%`;
     } else {
       node.data.label = time;
     }
@@ -520,7 +576,7 @@ export class AccordionGraph extends LitElement {
   showTraffic(target: any): void {
     const protocol = target.data().traffic.protocol;
     const rates = target.data().traffic.rates?.[protocol] ? `\n(${target.data().traffic.rates?.[protocol]})` : ``;
-    const percentage = target.data().traffic.rates?.[protocol + `PercentReq`] ? `\n(${target.data().traffic.rates?.[protocol + `PercentReq`]})` : ``;
+    const percentage = target.data().traffic.rates?.[protocol + `PercentReq`] ? `\n(${target.data().traffic.rates?.[protocol + `PercentReq`]})%` : ``;
     const time = target.data()?.responseTime ? target.data()?.responseTime + `ms` : ``;
     
     if (this.requestType === `No Edge Labels`) {
@@ -673,6 +729,7 @@ export class AccordionGraph extends LitElement {
     this.reset();
     this.hilightEdge();
     this.hilightNode();
+    this.initGraphInfo();
   }
 
   onClickReload(): void {
@@ -680,7 +737,45 @@ export class AccordionGraph extends LitElement {
     this.cy.fit();
   }
 
-  render() {
+  initGraphInfo(): void {
+    const nonServiceEdges = this.cy?.$(`node[nodeType != "${NodeType.SERVICE}"][!isGroup]`).edgesTo('*');    
+    const incomingEdges = this.cy?.$(`node[?isRoot]`).edgesTo('*');
+    const outgoingEdges = this.cy?.nodes().leaves(`node[nodeType = "service entry"]`).connectedEdges();
+
+    this.incomingRateGrpc = getAccumulatedTrafficRateGrpc(incomingEdges);
+    this.incomingRateHttp = getAccumulatedTrafficRateHttp(incomingEdges);
+    
+    this.outgoingRateGrpc = getAccumulatedTrafficRateGrpc(outgoingEdges);
+    this.outgoingRateHttp = getAccumulatedTrafficRateHttp(outgoingEdges);
+
+    this.totalRateHttp = getAccumulatedTrafficRateHttp(nonServiceEdges);
+    this.totalRateGrpc = getAccumulatedTrafficRateGrpc(nonServiceEdges);
+
+    this.rps = this.metricsData.metrics?.request_count?.matrix[0]?.values?.map((each: any) => {
+      each[0] *= 1000;
+      return each;
+    });
+    this.errorRps = this.metricsData.metrics?.request_error_count?.matrix[0]?.values?.map((each: any) => {
+      each[0] *= 1000;
+      return each;
+    });
+
+    this.graphInfo.http = this.totalRateHttp?.rate || 0;
+    this.graphInfo.http2xx = this.totalRateHttp?.rate - this.totalRateHttp?.rate3xx - this.totalRateHttp?.rate4xx - this.totalRateHttp?.rate5xx || 0;
+    this.graphInfo.http3xx = this.totalRateHttp?.rate3xx || 0;
+    this.graphInfo.http4xx = this.totalRateHttp?.rate4xx || 0;
+    this.graphInfo.http5xx = this.totalRateHttp?.rate5xx || 0;
+    this.graphInfo.incomingHttp = this.incomingRateHttp;
+    this.graphInfo.outgoingHttp = this.outgoingRateHttp;
+    this.graphInfo.grpc = this.totalRateGrpc?.rate;
+    this.graphInfo.grpcError = this.totalRateGrpc?.rateErr;
+    this.graphInfo.incomingGrpc = this.incomingRateGrpc;
+    this.graphInfo.outgoingGrpc = this.outgoingRateGrpc;
+    this.graphInfo.rps = this.rps || [];
+    this.graphInfo.errorRps = this.errorRps || [];
+  }
+
+  render() {    
     return html`    
     <div class="graph-wrap ${this.styles()}">
       <div class="toolbar">
@@ -720,7 +815,29 @@ export class AccordionGraph extends LitElement {
         </div>
 
         <div class="info ${this.hideInfoBox ? `hide` : ``}">
-        
+          <accordion-graph-info
+            .appCount="${this.appCount}"
+            .serviceCount="${this.serviceCount}"
+            .workloadCount="${this.workloadCount}"
+            .edgeCount="${this.edgeCount}"
+            .versionedAppCount="${this.versionedAppCount}"
+
+            .http="${this.totalRateHttp?.rate || 0}"
+            .http2xx="${this.totalRateHttp?.rate - this.totalRateHttp?.rate3xx - this.totalRateHttp?.rate4xx - this.totalRateHttp?.rate5xx || 0}"
+            .http3xx="${this.totalRateHttp?.rate3xx || 0}"
+            .http4xx="${this.totalRateHttp?.rate4xx || 0}"
+            .http5xx="${this.totalRateHttp?.rate5xx || 0}"
+            .incomingHttp="${this.incomingRateHttp}"
+            .outgoingHttp="${this.outgoingRateHttp}"
+
+            .grpc="${this.totalRateGrpc?.rate}"
+            .grpcError="${this.totalRateGrpc?.rateErr}"
+            .incomingGrpc="${this.incomingRateGrpc}"
+            .outgoingGrpc="${this.outgoingRateGrpc}"
+
+            .rps="${this.rps || []}"
+            .errorRps="${this.errorRps || []}"
+          ></accordion-graph-info>
         </div>
       </div>
       <accordion-option-modal>
