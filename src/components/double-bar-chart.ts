@@ -7,38 +7,34 @@ import {
 } from 'lit-element';
 import ApexCharts from 'apexcharts';
 
-@customElement('accordion-bar-chart')
-export class AccordionBarChart extends LitElement {
+@customElement('accordion-double-bar-chart')
+export class AccordionDoubleBarChart extends LitElement {
   static get properties(): PropertyDeclarations {
     return {
       title: { type: String },
-      type: { type: String, reflect: true },
+      type: { type: String },
       data: { type: Array },
     };
   }
 
-  title = `Total`;
-  type: `HTTP` | `GRPC` = `HTTP`;
-  data: any[] = [0, 0, 0, 0];
+  title: string;
+  type: `HTTP` | `GRPC`;
+  data: any[];
 
   private chart: ApexCharts;
   private chartOption: any;
 
-  disconnectedCallback() {
-    this.chart.destroy();
-    this.chart = null;
-    super.disconnectedCallback();
-  }
+  constructor() {
+    super();
 
-  createRenderRoot() {
-    return this;
-  }
-
-  protected firstUpdated(): void {
-    this.initChart();
-  }
-
-  initChart(): void {
+    this.title = `Total`;
+    this.type = `HTTP`;
+    this.data = [
+      [0, 0],
+      [0, 0],
+      [0, 0],
+      [0, 0],
+    ];
     this.chartOption = {
       grid: {
         show: true,
@@ -47,11 +43,6 @@ export class AccordionBarChart extends LitElement {
         xaxis: {
           lines: {
             show: true,
-          },
-        },
-        yaxis: {
-          lines: {
-            show: false,
           },
         },
         strokeDashArray: 7,
@@ -73,29 +64,29 @@ export class AccordionBarChart extends LitElement {
           ? [
               {
                 name: '2xx',
-                data: [this.data[0]],
+                data: [...this.data[0]],
               },
               {
                 name: '3xx',
-                data: [this.data[1]],
+                data: [...this.data[1]],
               },
               {
                 name: '4xx',
-                data: [this.data[2]],
+                data: [...this.data[2]],
               },
               {
                 name: '5xx',
-                data: [this.data[3]],
+                data: [...this.data[3]],
               },
             ]
           : [
               {
                 name: `OK`,
-                data: [this.data[0]],
+                data: [...this.data[0]],
               },
               {
                 name: `Erorr`,
-                data: [this.data[1]],
+                data: [...this.data[1]],
               },
             ],
       chart: {
@@ -112,15 +103,12 @@ export class AccordionBarChart extends LitElement {
           horizontal: true,
         },
       },
-      yaxis: {
-        show: false,
+      xaxis: {
+        categories: [`In`, `Out`],
       },
       stroke: {
         width: 1,
         colors: ['#fff'],
-      },
-      xaxis: {
-        categories: [this.title],
       },
       tooltip: {
         y: {
@@ -139,6 +127,23 @@ export class AccordionBarChart extends LitElement {
         offsetX: 40,
       },
     };
+  }
+
+  disconnectedCallback() {
+    this.chart.destroy();
+    this.chart = null;
+    super.disconnectedCallback();
+  }
+
+  createRenderRoot() {
+    return this;
+  }
+
+  protected firstUpdated(): void {
+    this.initChart();
+  }
+
+  initChart(): void {
     this.chart = new ApexCharts(this.querySelector(`#chart`), this.chartOption);
     this.chart.render();
   }
@@ -148,19 +153,19 @@ export class AccordionBarChart extends LitElement {
       this.chart.updateSeries([
         {
           name: '2xx',
-          data: [this.data[0]],
+          data: [...this.data[0]],
         },
         {
           name: '3xx',
-          data: [this.data[1]],
+          data: [...this.data[1]],
         },
         {
           name: '4xx',
-          data: [this.data[2]],
+          data: [...this.data[2]],
         },
         {
           name: '5xx',
-          data: [this.data[3]],
+          data: [...this.data[3]],
         },
       ]);
     } else {
@@ -170,11 +175,11 @@ export class AccordionBarChart extends LitElement {
       this.chart.updateSeries([
         {
           name: `OK`,
-          data: [this.data[0]],
+          data: [...this.data[0]],
         },
         {
           name: `Erorr`,
-          data: [this.data[1]],
+          data: [...this.data[1]],
         },
       ]);
     }

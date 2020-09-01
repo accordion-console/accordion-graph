@@ -1,12 +1,18 @@
-import { html, TemplateResult, customElement, LitElement, PropertyDeclarations, } from 'lit-element';
+import {
+  html,
+  TemplateResult,
+  customElement,
+  LitElement,
+  PropertyDeclarations,
+} from 'lit-element';
 import ApexCharts from 'apexcharts';
 
 @customElement('accordion-area-chart')
 export class AccordionAreaChart extends LitElement {
   static get properties(): PropertyDeclarations {
     return {
-      title: { type: String, },
-      data: { type: Array, },
+      title: { type: String },
+      data: { type: Array },
     };
   }
 
@@ -17,25 +23,25 @@ export class AccordionAreaChart extends LitElement {
   private chartOption: any;
 
   constructor() {
-    super();  
+    super();
 
     this.data = [
       {
         name: `RPS`,
         data: [
-          [1597801680 * 1000, 30.95],
-          [1597800960 * 1000, 31.34],       
+          [0, 0],
+          [0, 0],
         ],
       },
       {
         name: `Error`,
         data: [
-          [1597801680 * 1000, 5.95],
-          [1597800960 * 1000, 0.34],       
+          [0, 0],
+          [0, 0],
         ],
       },
     ];
-    this.chartOption = {            
+    this.chartOption = {
       series: this.data,
       colors: [`rgb(61, 134, 73)`, `rgb(201, 24, 12)`],
       chart: {
@@ -51,9 +57,9 @@ export class AccordionAreaChart extends LitElement {
       },
       yaxis: {
         show: false,
-      },            
+      },
       dataLabels: {
-        enabled: false
+        enabled: false,
       },
       markers: {
         size: 0,
@@ -68,8 +74,8 @@ export class AccordionAreaChart extends LitElement {
           format: 'TT hh:mm:ss',
           formatter: (val: string) => {
             return new Date(val).toLocaleTimeString();
-          }
-        }
+          },
+        },
       },
       fill: {
         type: 'gradient',
@@ -77,17 +83,19 @@ export class AccordionAreaChart extends LitElement {
           shadeIntensity: 1,
           opacityFrom: 0.7,
           opacityTo: 0.9,
-          stops: [0, 100]
-        }
+          stops: [0, 100],
+        },
       },
       stroke: {
         width: 1,
-        curve: 'straight'
+        curve: 'straight',
       },
     };
   }
 
   disconnectedCallback() {
+    this.chart.destroy();
+    this.chart = null;
     super.disconnectedCallback();
   }
 
@@ -107,11 +115,8 @@ export class AccordionAreaChart extends LitElement {
   protected updated(): void {
     this.chart.updateSeries(this.data);
   }
-  
+
   protected render(): TemplateResult {
-    return html`
-    <div id="chart"></div>
-    `;
+    return html` <div id="chart"></div> `;
   }
 }
-
