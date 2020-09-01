@@ -1,13 +1,13 @@
 {
   "name": "@accordion/accordion-graph",
-  "version": "0.0.9",
+  "version": "0.0.11",
   "private": false,
   "description": "npm publish test",
   "author": "taeuk_kang",
   "license": "MIT",
   "main": "index.js",
   "module": "index.js",
-  "types": "index.d.ts",
+  "types": "./types/index.d.ts",
   "scripts": {
     "start": "concurrently --kill-others --names tsc,es-dev-server \"npm run tsc:watch\" \"es-dev-server --config ./es-dev-server.config.js\"",
     "tsc:watch": "tsc --watch",
